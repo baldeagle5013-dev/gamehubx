@@ -1,8 +1,5 @@
 // Monopoly Bot AI - Makes smart decisions
-const BOARD = require('./monopoly').board || (() => {
-  // Inline board reference for bot decisions
-  return null;
-})();
+// Board data is accessed via the game instance, no direct import needed
 
 class MonopolyBot {
   constructor(gameInstance, botPlayers) {
