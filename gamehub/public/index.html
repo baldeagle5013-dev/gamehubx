@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS GAMES — Play Together</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #c9a84c;
+      --gold-light: #e8c97a;
+      --gold-dim: #8a6d2f;
+      --dark: #060608;
+      --dark-2: #0d0d12;
+      --dark-3: #141420;
+      --dark-4: #1c1c2e;
+      --text: #e8e4d8;
+      --text-dim: #8a8070;
+      --accent: #4c6bc9;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--dark);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(201,168,76,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 80% at 80% 90%, rgba(76,107,201,0.03) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Noise texture overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      background-size: 150px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1.5rem 3rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to bottom, rgba(6,6,8,0.95), transparent);
+      backdrop-filter: blur(10px);
+    }
+
+    .logo {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      color: var(--gold);
+      text-transform: uppercase;
+    }
+
+    .logo span {
+      color: var(--text);
+      font-weight: 300;
+    }
+
+    nav ul {
+      list-style: none;
+      display: flex;
+      gap: 2.5rem;
+    }
+
+    nav a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      transition: color 0.2s;
+    }
+
+    nav a:hover { color: var(--gold); }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+    }
+
+    .hero-eyebrow {
+      font-size: 0.65rem;
+      letter-spacing: 0.4em;
+      color: var(--gold);
+      text-transform: uppercase;
+      margin-bottom: 2rem;
+      opacity: 0;
+      animation: fadeUp 0.8s forwards 0.3s;
+    }
+
+    .hero-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(3.5rem, 10vw, 8rem);
+      font-weight: 300;
+      line-height: 0.9;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+      opacity: 0;
+      animation: fadeUp 1s forwards 0.5s;
+    }
+
+    .hero-title strong {
+      display: block;
+      font-weight: 700;
+      color: var(--gold);
+    }
+
+    .hero-sub {
+      font-size: 0.75rem;
+      letter-spacing: 0.3em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-top: 2rem;
+      margin-bottom: 3rem;
+      opacity: 0;
+      animation: fadeUp 0.8s forwards 0.8s;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 1.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      opacity: 0;
+      animation: fadeUp 0.8s forwards 1s;
+    }
+
+    .btn-primary {
+      background: var(--gold);
+      color: var(--dark);
+      border: none;
+      padding: 0.9rem 2.5rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.25s;
+      font-weight: 700;
+    }
+
+    .btn-primary:hover {
+      background: var(--gold-light);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(201,168,76,0.3);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid rgba(232,228,216,0.2);
+      padding: 0.9rem 2.5rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.25s;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    /* Divider */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+      opacity: 0;
+      animation: fadeUp 0.8s forwards 1.2s;
+    }
+
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      max-width: 120px;
+      height: 1px;
+      background: linear-gradient(to right, transparent, var(--gold-dim));
+    }
+
+    .divider::after {
+      background: linear-gradient(to left, transparent, var(--gold-dim));
+    }
+
+    .divider span {
+      color: var(--gold-dim);
+      font-size: 0.9rem;
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      gap: 4rem;
+      justify-content: center;
+      margin-top: 4rem;
+      padding-top: 3rem;
+      border-top: 1px solid rgba(201,168,76,0.1);
+      opacity: 0;
+      animation: fadeUp 0.8s forwards 1.4s;
+    }
+
+    .stat { text-align: center; }
+
+    .stat-number {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--gold);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.25em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-top: 0.4rem;
+    }
+
+    /* Games section */
+    .section {
+      position: relative;
+      z-index: 1;
+      padding: 6rem 3rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .section-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 3rem;
+      font-weight: 300;
+      letter-spacing: 0.05em;
+    }
+
+    .section-title em {
+      font-style: italic;
+      color: var(--gold);
+    }
+
+    .section-count {
+      font-size: 0.65rem;
+      letter-spacing: 0.3em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    /* Game grid */
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5px;
+      background: rgba(201,168,76,0.08);
+    }
+
+    .game-card {
+      background: var(--dark-2);
+      padding: 2.5rem;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      transition: background 0.3s;
+    }
+
+    .game-card:hover { background: var(--dark-3); }
+
+    .game-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(to right, var(--gold), transparent);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.4s;
+    }
+
+    .game-card:hover::before { transform: scaleX(1); }
+
+    .game-card.coming-soon {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .game-badge {
+      display: inline-block;
+      font-size: 0.55rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.6rem;
+      border: 1px solid;
+      margin-bottom: 1.5rem;
+    }
+
+    .badge-live { border-color: var(--gold); color: var(--gold); }
+    .badge-soon { border-color: var(--text-dim); color: var(--text-dim); }
+
+    .game-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .game-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      margin-bottom: 0.5rem;
+    }
+
+    .game-desc {
+      font-size: 0.7rem;
+      line-height: 1.8;
+      color: var(--text-dim);
+      margin-bottom: 1.5rem;
+    }
+
+    .game-meta {
+      display: flex;
+      gap: 1.5rem;
+    }
+
+    .meta-item {
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .meta-item span {
+      display: block;
+      color: var(--text);
+      font-size: 0.7rem;
+      margin-top: 0.2rem;
+    }
+
+    .game-arrow {
+      position: absolute;
+      bottom: 2.5rem;
+      right: 2.5rem;
+      font-size: 1.5rem;
+      color: var(--gold-dim);
+      transition: all 0.3s;
+    }
+
+    .game-card:hover .game-arrow {
+      color: var(--gold);
+      transform: translate(4px, -4px);
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6,6,8,0.9);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      backdrop-filter: blur(8px);
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: var(--dark-3);
+      border: 1px solid rgba(201,168,76,0.15);
+      padding: 3rem;
+      max-width: 500px;
+      width: 100%;
+      transform: translateY(20px);
+      transition: transform 0.3s;
+    }
+
+    .modal-overlay.open .modal { transform: translateY(0); }
+
+    .modal-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .modal-sub {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 2.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.6rem;
+      letter-spacing: 0.25em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 0.6rem;
+    }
+
+    .form-input {
+      width: 100%;
+      background: var(--dark-4);
+      border: 1px solid rgba(201,168,76,0.1);
+      padding: 0.8rem 1rem;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus { border-color: var(--gold-dim); }
+
+    .form-row { display: flex; gap: 1rem; }
+
+    .toggle-group {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .toggle-btn {
+      flex: 1;
+      background: var(--dark-4);
+      border: 1px solid rgba(201,168,76,0.1);
+      color: var(--text-dim);
+      padding: 0.7rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+
+    .toggle-btn.active {
+      background: rgba(201,168,76,0.1);
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2.5rem;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      cursor: pointer;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      padding: 0.9rem;
+    }
+
+    .modal-close:hover { color: var(--text); }
+
+    /* Join room */
+    .join-divider {
+      text-align: center;
+      margin: 2rem 0 1.5rem;
+      font-size: 0.6rem;
+      letter-spacing: 0.3em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      position: relative;
+    }
+
+    .join-divider::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: rgba(201,168,76,0.1);
+      z-index: -1;
+    }
+
+    .join-divider span {
+      background: var(--dark-3);
+      padding: 0 1rem;
+    }
+
+    .join-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .join-row .form-input { flex: 1; text-transform: uppercase; }
+
+    /* Error */
+    .error-msg {
+      color: #e05;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      margin-top: 1rem;
+      display: none;
+    }
+
+    .error-msg.show { display: block; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Footer */
+    footer {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid rgba(201,168,76,0.08);
+      padding: 3rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .footer-logo {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.2rem;
+      color: var(--gold-dim);
+      letter-spacing: 0.2em;
+    }
+
+    .footer-copy {
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      color: var(--text-dim);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--dark); }
+    ::-webkit-scrollbar-thumb { background: var(--gold-dim); }
+
+    @media (max-width: 768px) {
+      nav { padding: 1rem 1.5rem; }
+      nav ul { display: none; }
+      .section { padding: 4rem 1.5rem; }
+      .stats-bar { gap: 2rem; }
+      .modal { padding: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Nexus<span>Games</span></div>
+  <ul>
+    <li><a href="#games">Games</a></li>
+    <li><a href="#" onclick="openModal(event)">Play Now</a></li>
+  </ul>
+</nav>
+
+<section class="hero">
+  <div class="hero-eyebrow">★ Multiplayer Board Games Online ★</div>
+  <h1 class="hero-title">
+    Play the<br>
+    <strong>Classics.</strong>
+  </h1>
+  <p class="hero-sub">Real-time multiplayer · Smart AI opponents · No downloads</p>
+
+  <div class="divider"><span>✦</span></div>
+
+  <div class="hero-cta">
+    <a href="#games" class="btn-primary">Browse Games</a>
+    <a href="#" class="btn-secondary" onclick="openModal(event)">Quick Play</a>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-number">1</div>
+      <div class="stat-label">Game Live</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">4</div>
+      <div class="stat-label">Max Players</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">∞</div>
+      <div class="stat-label">Fun Guaranteed</div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="games">
+  <div class="section-header">
+    <h2 class="section-title">The <em>Collection</em></h2>
+    <span class="section-count">01 available · more coming soon</span>
+  </div>
+
+  <div class="games-grid">
+
+    <!-- Monopoly - LIVE -->
+    <a href="/games/monopoly" class="game-card">
+      <div class="game-badge badge-live">Live Now</div>
+      <span class="game-icon">🏦</span>
+      <h3 class="game-title">Monopoly</h3>
+      <p class="game-desc">
+        The ultimate property trading game. Build your empire, bankrupt your rivals.
+        Full ruleset with houses, hotels, auctions, mortgages and Community Chest cards.
+      </p>
+      <div class="game-meta">
+        <div class="meta-item">Players<span>2–4</span></div>
+        <div class="meta-item">Mode<span>Online / Bots</span></div>
+        <div class="meta-item">Duration<span>30–120 min</span></div>
+      </div>
+      <div class="game-arrow">↗</div>
+    </a>
+
+    <!-- Coming Soon Games -->
+    <div class="game-card coming-soon">
+      <div class="game-badge badge-soon">Coming Soon</div>
+      <span class="game-icon">♟</span>
+      <h3 class="game-title">Chess</h3>
+      <p class="game-desc">
+        Classical chess with full AI difficulty levels and ELO ranking.
+        Play timed blitz or classical games.
+      </p>
+      <div class="game-meta">
+        <div class="meta-item">Players<span>2</span></div>
+        <div class="meta-item">Mode<span>Online / AI</span></div>
+        <div class="meta-item">Duration<span>10–90 min</span></div>
+      </div>
+    </div>
+
+    <div class="game-card coming-soon">
+      <div class="game-badge badge-soon">Coming Soon</div>
+      <span class="game-icon">🎲</span>
+      <h3 class="game-title">Catan</h3>
+      <p class="game-desc">
+        Settle, trade, and build your way to victory on the island of Catan.
+        Full trading system and resource management.
+      </p>
+      <div class="game-meta">
+        <div class="meta-item">Players<span>3–4</span></div>
+        <div class="meta-item">Mode<span>Online / Bots</span></div>
+        <div class="meta-item">Duration<span>60–120 min</span></div>
+      </div>
+    </div>
+
+    <div class="game-card coming-soon">
+      <div class="game-badge badge-soon">Coming Soon</div>
+      <span class="game-icon">🃏</span>
+      <h3 class="game-title">Uno</h3>
+      <p class="game-desc">
+        Fast-paced card game for all ages. Wild cards, draw fours, and
+        chaotic reversals in real time.
+      </p>
+      <div class="game-meta">
+        <div class="meta-item">Players<span>2–8</span></div>
+        <div class="meta-item">Mode<span>Online / Bots</span></div>
+        <div class="meta-item">Duration<span>15–45 min</span></div>
+      </div>
+    </div>
+
+    <div class="game-card coming-soon">
+      <div class="game-badge badge-soon">Coming Soon</div>
+      <span class="game-icon">🔵</span>
+      <h3 class="game-title">Connect Four</h3>
+      <p class="game-desc">
+        Classic vertical connection game with unbeatable minimax AI opponent
+        for serious challengers.
+      </p>
+      <div class="game-meta">
+        <div class="meta-item">Players<span>2</span></div>
+        <div class="meta-item">Mode<span>Online / AI</span></div>
+        <div class="meta-item">Duration<span>5–15 min</span></div>
+      </div>
+    </div>
+
+    <div class="game-card coming-soon">
+      <div class="game-badge badge-soon">Coming Soon</div>
+      <span class="game-icon">🎯</span>
+      <h3 class="game-title">Risk</h3>
+      <p class="game-desc">
+        Global domination on a classic map. Strategize alliances,
+        invade territories, and eliminate rivals.
+      </p>
+      <div class="game-meta">
+        <div class="meta-item">Players<span>3–6</span></div>
+        <div class="meta-item">Mode<span>Online / Bots</span></div>
+        <div class="meta-item">Duration<span>90–240 min</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo">NEXUS GAMES</div>
+  <div class="footer-copy">© 2025 — Real-time multiplayer board games</div>
+</footer>
+
+<!-- Quick Play Modal -->
+<div class="modal-overlay" id="quickModal" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <h2 class="modal-title">Quick Play</h2>
+    <p class="modal-sub">Create or join a Monopoly game</p>
+
+    <div class="form-group">
+      <label class="form-label">Your Name</label>
+      <input type="text" class="form-input" id="qpName" placeholder="Enter your name" maxlength="20">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Game Mode</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" onclick="setMode(this,'multiplayer')">Multiplayer</button>
+        <button class="toggle-btn" onclick="setMode(this,'bots')">vs Bots</button>
+      </div>
+    </div>
+
+    <div class="form-group" id="botCountGroup" style="display:none">
+      <label class="form-label">Number of Bots</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" onclick="setBots(this,1)">1 Bot</button>
+        <button class="toggle-btn" onclick="setBots(this,2)">2 Bots</button>
+        <button class="toggle-btn" onclick="setBots(this,3)">3 Bots</button>
+      </div>
+    </div>
+
+    <div id="errorMsg" class="error-msg">Please enter your name.</div>
+
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="createAndGo()">Create Room</button>
+      <button class="modal-close" onclick="closeModal()">Cancel</button>
+    </div>
+
+    <div class="join-divider"><span>Or join existing</span></div>
+
+    <div class="join-row">
+      <input type="text" class="form-input" id="joinCode" placeholder="ROOM CODE" maxlength="6" style="text-transform:uppercase">
+      <button class="btn-secondary" onclick="joinRoom()" style="white-space:nowrap;padding:0.8rem 1.5rem">Join →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let selectedMode = 'multiplayer';
+  let selectedBots = 1;
+
+  function openModal(e) {
+    if (e) e.preventDefault();
+    document.getElementById('quickModal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('quickModal').classList.remove('open');
+  }
+
+  function handleOverlayClick(e) {
+    if (e.target === document.getElementById('quickModal')) closeModal();
+  }
+
+  function setMode(btn, mode) {
+    selectedMode = mode;
+    btn.parentElement.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('botCountGroup').style.display = mode === 'bots' ? 'block' : 'none';
+  }
+
+  function setBots(btn, count) {
+    selectedBots = count;
+    btn.parentElement.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  async function createAndGo() {
+    const name = document.getElementById('qpName').value.trim();
+    const err = document.getElementById('errorMsg');
+    if (!name) { err.classList.add('show'); return; }
+    err.classList.remove('show');
+
+    try {
+      const resp = await fetch('/api/rooms/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          game: 'monopoly',
+          playerName: name,
+          maxPlayers: 4,
+          withBots: selectedMode === 'bots',
+          botCount: selectedMode === 'bots' ? selectedBots : 0
+        })
+      });
+      const { roomId } = await resp.json();
+      window.location.href = `/games/monopoly?room=${roomId}&name=${encodeURIComponent(name)}`;
+    } catch (e) {
+      err.textContent = 'Failed to create room. Is the server running?';
+      err.classList.add('show');
+    }
+  }
+
+  async function joinRoom() {
+    const code = document.getElementById('joinCode').value.trim().toUpperCase();
+    const name = document.getElementById('qpName').value.trim();
+    const err = document.getElementById('errorMsg');
+
+    if (!name) { err.textContent = 'Please enter your name first.'; err.classList.add('show'); return; }
+    if (code.length < 4) { err.textContent = 'Enter a valid room code.'; err.classList.add('show'); return; }
+    err.classList.remove('show');
+
+    try {
+      const resp = await fetch(`/api/rooms/${code}`);
+      if (!resp.ok) { err.textContent = 'Room not found.'; err.classList.add('show'); return; }
+      window.location.href = `/games/monopoly?room=${code}&name=${encodeURIComponent(name)}`;
+    } catch (e) {
+      err.textContent = 'Could not connect.';
+      err.classList.add('show');
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Enter' && document.getElementById('quickModal').classList.contains('open')) createAndGo();
+  });
+</script>
+
+</body>
+</html>
