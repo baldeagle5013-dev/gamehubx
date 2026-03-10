@@ -682,6 +682,40 @@ class MonopolyGame {
     return { type: 'used-jail-card', player: player.name };
   }
 
+  executeTrade(trade) {
+    const from = this.players.find(p => p.id === trade.from);
+    const to   = this.players.find(p => p.id === trade.to);
+    if (!from || !to) return;
+
+    // Transfer properties from → to
+    (trade.offerProps || []).forEach(pos => {
+      if (this.ownership[pos] !== from.id) return;
+      this.ownership[pos] = to.id;
+      from.properties = from.properties.filter(p => p !== pos);
+      to.properties.push(pos);
+    });
+
+    // Transfer properties to → from
+    (trade.requestProps || []).forEach(pos => {
+      if (this.ownership[pos] !== to.id) return;
+      this.ownership[pos] = from.id;
+      to.properties = to.properties.filter(p => p !== pos);
+      from.properties.push(pos);
+    });
+
+    // Transfer money
+    if (trade.offerMoney > 0) {
+      from.money -= trade.offerMoney;
+      to.money   += trade.offerMoney;
+    }
+    if (trade.requestMoney > 0) {
+      to.money   -= trade.requestMoney;
+      from.money += trade.requestMoney;
+    }
+
+    this.addLog(`Trade completed: ${from.name} ↔ ${to.name}`);
+  }
+
   doBankruptcy(player) {
     player.isBankrupt = true;
     // Return all properties to bank
