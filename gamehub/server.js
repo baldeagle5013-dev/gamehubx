@@ -213,29 +213,88 @@ function handleGameAction(room, roomId, playerId, action, data) {
 
 function scheduleBotTurn(room, roomId) {
   if (!room.gameInstance || !room.botHandler) return;
-  
+
   const currentPlayer = room.gameInstance.getCurrentPlayer();
   if (currentPlayer && currentPlayer.isBot) {
     setTimeout(() => {
-      if (rooms[roomId] && room.state === 'playing') {
-        const actions = room.botHandler.getActions(currentPlayer.id);
-        actions.forEach((act, i) => {
-          setTimeout(() => {
-            if (rooms[roomId] && room.state === 'playing') {
-              const result = room.gameInstance.handleAction(currentPlayer.id, act.action, act.data);
-              if (result) {
-                broadcastGameState(room, roomId);
-                io.to(roomId).emit('game-event', result);
-              }
-              if (i === actions.length - 1) {
-                scheduleBotTurn(room, roomId);
-              }
-            }
-          }, i * 1200);
-        });
-      }
+      if (!rooms[roomId] || room.state !== 'playing') return;
+
+      const actions = room.botHandler.getActions(currentPlayer.id);
+      actions.forEach((act, i) => {
+        setTimeout(() => {
+          if (!rooms[roomId] || room.state !== 'playing') return;
+          const result = room.gameInstance.handleAction(currentPlayer.id, act.action, act.data);
+          if (result) {
+            broadcastGameState(room, roomId);
+            io.to(roomId).emit('game-event', result);
+          }
+          // After the last action (end-turn), try to propose a trade
+          if (i === actions.length - 1) {
+            scheduleBotTrade(room, roomId, currentPlayer.id, () => {
+              scheduleBotTurn(room, roomId);
+            });
+          }
+        }, i * 1200);
+      });
     }, 1500);
   }
+}
+
+function scheduleBotTrade(room, roomId, botId, done) {
+  if (!room.gameInstance || !room.botHandler) return done();
+
+  // Small delay so the turn-end state settles first
+  setTimeout(() => {
+    if (!rooms[roomId] || room.state !== 'playing') return done();
+
+    const proposal = room.botHandler.getTradeProposal(botId);
+    if (!proposal) return done();
+
+    // Store the pending trade
+    if (!room.pendingTrades) room.pendingTrades = {};
+    room.pendingTrades[proposal.id] = proposal;
+
+    const target = room.gameInstance.getState().players.find(p => p.id === proposal.to);
+    if (!target) return done();
+
+    if (target.isBot) {
+      // Bot-to-bot trade: auto-respond immediately
+      const accepts = room.botHandler.shouldAcceptTrade(proposal.to, proposal);
+      if (accepts) {
+        room.gameInstance.executeTrade(proposal);
+        broadcastGameState(room, roomId);
+        io.to(roomId).emit('game-event', {
+          type: 'multi-event',
+          events: [{
+            type: 'trade-complete',
+            from: room.gameInstance.getState().players.find(p => p.id === proposal.from)?.name || 'Bot',
+            to: target.name
+          }]
+        });
+        addRoomLog(room, `🤝 ${target.name} accepted a trade offer from a bot.`);
+      }
+      delete room.pendingTrades[proposal.id];
+      done();
+    } else {
+      // Bot proposes trade to human — show popup, wait up to 30s for response
+      io.to(proposal.to).emit('trade-offer', proposal);
+      addRoomLog(room, `🤝 A bot proposed a trade to ${target.name}.`);
+
+      // Auto-expire after 30 seconds if no response
+      setTimeout(() => {
+        if (room.pendingTrades && room.pendingTrades[proposal.id]) {
+          delete room.pendingTrades[proposal.id];
+        }
+      }, 30000);
+
+      // Don't block — done() immediately so the next bot turn isn't held up
+      done();
+    }
+  }, 800);
+}
+
+function addRoomLog(room, msg) {
+  if (room.gameInstance) room.gameInstance.addLog(msg);
 }
 
 function broadcastGameState(room, roomId) {
