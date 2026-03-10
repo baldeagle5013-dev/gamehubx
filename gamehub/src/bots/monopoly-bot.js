@@ -4,8 +4,10 @@ class MonopolyBot {
   constructor(gameInstance, botPlayers) {
     this.game = gameInstance;
     this.bots = botPlayers;
-    // Track trades proposed this turn to avoid spamming
-    this.proposedThisTurn = new Set();
+    // Track trades per group: groupKey -> { lastTurnProposed, declineCount }
+    // Prevents spamming the same offer every single turn
+    this.tradeCooldowns = {};
+    this.currentTurn = 0;
   }
 
   // ─── TURN ACTIONS ────────────────────────────────────────────
@@ -13,6 +15,7 @@ class MonopolyBot {
     const state = this.game.getState();
     const bot = state.players.find(p => p.id === botId);
     if (!bot || bot.isBankrupt) return [];
+    this.currentTurn = state.turnCount || 0;
 
     const actions = [];
     const phase = state.phase;
@@ -41,8 +44,6 @@ class MonopolyBot {
     if (phase === 'action') {
       const buildActions = this.getBuildActions(state, bot);
       actions.push(...buildActions);
-      // Clear proposed trades at start of each action phase
-      this.proposedThisTurn.clear();
       actions.push({ action: 'end-turn', data: {} });
     }
 
@@ -55,14 +56,11 @@ class MonopolyBot {
   }
 
   // ─── TRADE INITIATION ────────────────────────────────────────
-  // Returns a trade object if the bot wants to propose one, or null.
-  // Called by the server after a bot's turn ends.
   getTradeProposal(botId) {
     const state = this.game.getState();
     const bot = state.players.find(p => p.id === botId);
-    if (!bot || bot.isBankrupt || bot.money < 50) return null;
+    if (!bot || bot.isBankrupt || bot.money < 100) return null;
 
-    // Look for groups where we own some but not all
     const board = state.board;
     const groups = {};
     board.filter(s => s.group).forEach(sq => {
@@ -70,108 +68,135 @@ class MonopolyBot {
       groups[sq.group].push(sq);
     });
 
+    // Score each possible trade opportunity and pick the best one
+    const opportunities = [];
+
     for (const [group, squares] of Object.entries(groups)) {
       const botOwns    = squares.filter(s => state.ownership[s.id] === botId);
-      const othersOwn  = squares.filter(s => state.ownership[s.id] && state.ownership[s.id] !== botId);
-      const unowned    = squares.filter(s => !state.ownership[s.id]);
+      const allOwned   = squares.every(s => !!state.ownership[s.id]);
+      const hasMonopoly = squares.every(s => state.ownership[s.id] === botId);
 
-      // Skip if we already have the monopoly or nothing to gain
-      if (botOwns.length === squares.length) continue;
-      if (unowned.length > 0) continue; // can still buy from bank
-      if (othersOwn.length === 0) continue;
+      if (hasMonopoly) continue;      // already have it
+      if (!allOwned) continue;        // still buyable from bank
+      if (botOwns.length === 0) continue; // we have no stake in this group
 
-      // We own at least 1, others own the rest — trade opportunity
-      if (botOwns.length === 0) continue;
+      // Check per-group cooldown: don't propose to same group within 4 turns,
+      // and if they declined 2+ times, wait 8 turns
+      const cooldownKey = `${botId}-${group}`;
+      const cd = this.tradeCooldowns[cooldownKey];
+      const now = this.currentTurn;
+      if (cd) {
+        const waitTurns = cd.declines >= 2 ? 8 : 4;
+        if (now - cd.lastProposed < waitTurns) continue;
+      }
 
-      // Find the player who owns the missing piece(s)
-      const targetId = othersOwn[0] && state.ownership[othersOwn[0].id];
-      if (!targetId) continue;
+      // Find who owns the missing pieces
+      const missing = squares.filter(s => state.ownership[s.id] && state.ownership[s.id] !== botId);
+      if (!missing.length) continue;
+
+      // Group all missing by owner — only target a single player per trade
+      const ownerCounts = {};
+      missing.forEach(s => {
+        ownerCounts[state.ownership[s.id]] = (ownerCounts[state.ownership[s.id]] || 0) + 1;
+      });
+      const [targetId] = Object.entries(ownerCounts).sort((a,b) => b[1]-a[1])[0];
       const targetPlayer = state.players.find(p => p.id === targetId);
       if (!targetPlayer || targetPlayer.isBankrupt) continue;
 
-      // Don't propose to same target twice this turn
-      const key = `${botId}->${targetId}-${group}`;
-      if (this.proposedThisTurn.has(key)) continue;
-
-      // Build the offer: give cash, possibly give one of our less-valuable properties
-      const wantProps = othersOwn.map(s => s.id);
-
-      // Value the missing properties
-      const missingValue = othersOwn.reduce((sum, s) => sum + (s.price || 0), 0);
-
-      // Offer: cash at ~110% of market value (we really want this monopoly)
-      const cashOffer = Math.min(
-        Math.floor(missingValue * 1.1),
-        bot.money - 200 // keep a buffer
+      // Don't offer to a player who already has a monopoly (they won't want to deal)
+      const targetAlreadyHasMonopoly = Object.values(groups).some(sqs =>
+        sqs.every(s => state.ownership[s.id] === targetId)
       );
-      if (cashOffer < missingValue * 0.7) continue; // can't afford a fair offer
 
-      // Optionally sweeten with one of our cheap surplus properties
-      const offerProps = this.getSurplusProp(state, bot, group);
+      const wantProps = missing.filter(s => state.ownership[s.id] === targetId).map(s => s.id);
+      const missingValue = wantProps.reduce((sum, pos) => {
+        const s = board.find(sq => sq.id === pos); return sum + (s?.price || 0);
+      }, 0);
 
-      this.proposedThisTurn.add(key);
+      // How much is this monopoly worth to us? More squares we own = more urgent
+      const monopolyUrgency = botOwns.length / squares.length; // 0.33 to 0.67+
+      const premium = 1.0 + monopolyUrgency * 0.35; // up to 1.35× market
+      const cashOffer = Math.min(
+        Math.floor(missingValue * premium),
+        bot.money - 200
+      );
+      if (cashOffer < missingValue * 0.6) continue;
 
-      return {
-        from: botId,
-        to: targetId,
-        offerProps: offerProps ? [offerProps] : [],
-        requestProps: wantProps,
-        offerMoney: cashOffer,
-        requestMoney: 0,
-        id: Date.now().toString() + Math.random().toString(36).slice(2),
-      };
+      // Can we sweeten with a surplus prop?
+      const surplusProp = this.getSurplusProp(state, bot, group, targetId);
+
+      opportunities.push({
+        group, targetId, wantProps, cashOffer, surplusProp,
+        score: monopolyUrgency * missingValue, // higher = better deal for us
+        cooldownKey,
+      });
     }
 
-    return null;
+    if (!opportunities.length) return null;
+
+    // Pick highest-score opportunity
+    opportunities.sort((a, b) => b.score - a.score);
+    const best = opportunities[0];
+
+    // Record this proposal in cooldowns
+    const cd = this.tradeCooldowns[best.cooldownKey] || { declines: 0 };
+    this.tradeCooldowns[best.cooldownKey] = { ...cd, lastProposed: this.currentTurn };
+
+    return {
+      from: botId,
+      to: best.targetId,
+      offerProps: best.surplusProp ? [best.surplusProp] : [],
+      requestProps: best.wantProps,
+      offerMoney: best.cashOffer,
+      requestMoney: 0,
+      id: Date.now().toString() + Math.random().toString(36).slice(2),
+    };
+  }
+
+  // Called when a trade this bot proposed was declined — increase cooldown
+  recordDecline(botId, group) {
+    const key = `${botId}-${group}`;
+    const cd = this.tradeCooldowns[key] || { lastProposed: 0 };
+    this.tradeCooldowns[key] = { lastProposed: this.currentTurn, declines: (cd.declines || 0) + 1 };
   }
 
   // ─── TRADE RESPONSE ──────────────────────────────────────────
-  // Called when an incoming trade is aimed at this bot.
-  // Returns true to accept, false to decline.
   shouldAcceptTrade(botId, trade) {
     const state = this.game.getState();
     const bot = state.players.find(p => p.id === botId);
     if (!bot || bot.isBankrupt) return false;
 
-    const netWorthBefore = this.calcNetWorth(bot, state);
+    const nwBefore = this.calcNetWorth(bot, state);
 
-    // Simulate the trade on a lightweight snapshot
-    const simBot = {
-      id: bot.id,
-      money: bot.money,
-      properties: [...bot.properties],
-    };
+    // Simulate trade on a snapshot
     const simOwnership = { ...state.ownership };
-    const simHouses = { ...state.houses };
+    const simProps = [...bot.properties];
+    let simMoney = bot.money;
 
-    // Apply trade to sim
-    // We give away requestProps and offerMoney, receive offerProps and requestMoney
     trade.requestProps.forEach(pos => {
       if (simOwnership[pos] !== botId) return;
       simOwnership[pos] = trade.from;
-      simBot.properties = simBot.properties.filter(p => p !== pos);
+      const idx = simProps.indexOf(pos); if (idx >= 0) simProps.splice(idx, 1);
     });
     trade.offerProps.forEach(pos => {
-      simOwnership[pos] = botId;
-      simBot.properties.push(pos);
+      simOwnership[pos] = botId; simProps.push(pos);
     });
-    simBot.money -= (trade.requestMoney || 0);
-    simBot.money += (trade.offerMoney || 0);
+    simMoney -= (trade.requestMoney || 0);
+    simMoney += (trade.offerMoney || 0);
 
-    if (simBot.money < 50) return false; // refuse if it leaves us broke
+    if (simMoney < 80) return false;
 
-    // Build a fake state for net worth calc
-    const simState = { ...state, ownership: simOwnership, houses: simHouses };
-    const netWorthAfter = this.calcNetWorth(simBot, simState);
+    const simBot = { ...bot, money: simMoney, properties: simProps };
+    const simState = { ...state, ownership: simOwnership };
+    const nwAfter = this.calcNetWorth(simBot, simState);
 
-    // Accept if net worth improves or stays within 5% (might still be strategically good)
-    const worthwhile = netWorthAfter >= netWorthBefore * 0.95;
+    // Refuse if this gives the proposer a monopoly and we gain less than 10% NW
+    const proposerGetsMonopoly = this.tradeGivesOpponentMonopoly(trade, state, trade.from);
+    const ourGainPct = (nwAfter - nwBefore) / Math.max(nwBefore, 1);
+    if (proposerGetsMonopoly && ourGainPct < 0.10) return false;
 
-    // Extra: refuse if the trade gives opponent a monopoly and we get nothing special
-    const opponentGetsMonopoly = this.tradeGivesOpponentMonopoly(trade, state, trade.from);
-    if (opponentGetsMonopoly && !worthwhile) return false;
-
-    return worthwhile;
+    // Accept if net worth improves by at least -5%
+    return nwAfter >= nwBefore * 0.95;
   }
 
   // ─── HELPERS ─────────────────────────────────────────────────
@@ -182,8 +207,7 @@ class MonopolyBot {
       if (!sq) return;
       const mortgaged = state.mortgaged && state.mortgaged[pos];
       w += mortgaged ? (sq.mortgage || Math.floor((sq.price || 0) / 2)) : (sq.price || 0);
-      const h = state.houses && state.houses[pos] || 0;
-      w += h * ((sq.houseCost || 0) / 2);
+      w += (state.houses?.[pos] || 0) * ((sq.houseCost || 0) / 2);
     });
     return w;
   }
@@ -193,40 +217,26 @@ class MonopolyBot {
     const simOwnership = { ...state.ownership };
     trade.requestProps.forEach(pos => { simOwnership[pos] = opponentId; });
     trade.offerProps.forEach(pos => { delete simOwnership[pos]; });
-
     const groups = {};
     board.filter(s => s.group).forEach(sq => {
       if (!groups[sq.group]) groups[sq.group] = [];
       groups[sq.group].push(sq);
     });
-
-    for (const squares of Object.values(groups)) {
-      if (squares.every(s => simOwnership[s.id] === opponentId)) return true;
-    }
-    return false;
+    return Object.values(groups).some(sqs => sqs.every(s => simOwnership[s.id] === opponentId));
   }
 
-  // Find a surplus property we own that isn't part of a near-monopoly group
-  getSurplusProp(state, bot, excludeGroup) {
+  getSurplusProp(state, bot, excludeGroup, targetId) {
     const board = state.board;
-    const groups = {};
-    bot.properties.forEach(pos => {
+    // Find properties we own that are in groups where someone else owns everything else
+    // (our piece is useless without completing, so it's good to trade away)
+    for (const pos of bot.properties) {
       const sq = board.find(s => s.id === pos);
-      if (sq && sq.group) {
-        if (!groups[sq.group]) groups[sq.group] = [];
-        groups[sq.group].push(pos);
-      }
-    });
-
-    // Find groups we only own 1 of (surplus, not near-monopoly) and not the current target group
-    for (const [group, positions] of Object.entries(groups)) {
-      if (group === excludeGroup) continue;
-      const allInGroup = board.filter(s => s.group === group);
-      const othersOwn = allInGroup.some(s => state.ownership[s.id] && state.ownership[s.id] !== bot.id);
-      // Only offer if others also own in this group (making our piece useless alone)
-      if (positions.length === 1 && othersOwn) {
-        return positions[0];
-      }
+      if (!sq || !sq.group || sq.group === excludeGroup) continue;
+      const groupSqs = board.filter(s => s.group === sq.group);
+      const botOwnsInGroup = groupSqs.filter(s => state.ownership[s.id] === bot.id).length;
+      if (botOwnsInGroup > 1) continue; // we own multiple — don't give up
+      const othersOwn = groupSqs.some(s => state.ownership[s.id] && state.ownership[s.id] !== bot.id && state.ownership[s.id] !== targetId);
+      if (!othersOwn) return pos; // only target owns the rest — our piece is worth trading
     }
     return null;
   }
