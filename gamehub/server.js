@@ -121,8 +121,14 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (!room.pendingTrades) room.pendingTrades = {};
     room.pendingTrades[trade.id] = trade;
-    // Forward to target player only
-    io.to(trade.to).emit('trade-offer', trade);
+    // Pause the game timer for human recipient
+    const target = room.players && room.players.find(p => p.id === trade.to);
+    if (target && !target.isBot) {
+      room.tradePaused = true;
+      io.to(trade.to).emit('trade-offer', trade);
+    } else {
+      io.to(trade.to).emit('trade-offer', trade);
+    }
   });
 
   socket.on('trade-respond', ({ roomId, tradeId, accept }) => {
@@ -131,12 +137,21 @@ io.on('connection', (socket) => {
     if (!room.pendingTrades || !room.pendingTrades[tradeId]) return;
     const trade = room.pendingTrades[tradeId];
     delete room.pendingTrades[tradeId];
+    room.tradePaused = false;
     if (accept) {
       room.gameInstance.executeTrade(trade);
       broadcastGameState(room, roomId);
       io.to(roomId).emit('trade-result', { accepted: true, tradeId });
     } else {
+      // Tell the proposer it was declined
       io.to(trade.from).emit('trade-result', { accepted: false, tradeId });
+      // If the proposer is a bot, record the decline so it backs off
+      if (room.botHandler) {
+        const fromPlayer = room.players.find(p => p.id === trade.from);
+        if (fromPlayer && fromPlayer.isBot && trade._group) {
+          room.botHandler.recordDecline(trade.from, trade._group);
+        }
+      }
     }
   });
 
@@ -242,53 +257,57 @@ function scheduleBotTurn(room, roomId) {
 
 function scheduleBotTrade(room, roomId, botId, done) {
   if (!room.gameInstance || !room.botHandler) return done();
+  // Don't propose if a trade is already pending human response
+  if (room.tradePaused) return done();
 
-  // Small delay so the turn-end state settles first
   setTimeout(() => {
     if (!rooms[roomId] || room.state !== 'playing') return done();
+    if (room.tradePaused) return done();
 
     const proposal = room.botHandler.getTradeProposal(botId);
     if (!proposal) return done();
 
-    // Store the pending trade
     if (!room.pendingTrades) room.pendingTrades = {};
     room.pendingTrades[proposal.id] = proposal;
 
-    const target = room.gameInstance.getState().players.find(p => p.id === proposal.to);
+    const state = room.gameInstance.getState();
+    const target = state.players.find(p => p.id === proposal.to);
     if (!target) return done();
 
     if (target.isBot) {
-      // Bot-to-bot trade: auto-respond immediately
+      // Bot-to-bot: resolve immediately
       const accepts = room.botHandler.shouldAcceptTrade(proposal.to, proposal);
       if (accepts) {
         room.gameInstance.executeTrade(proposal);
         broadcastGameState(room, roomId);
+        const fromName = state.players.find(p => p.id === proposal.from)?.name || 'Bot';
         io.to(roomId).emit('game-event', {
           type: 'multi-event',
-          events: [{
-            type: 'trade-complete',
-            from: room.gameInstance.getState().players.find(p => p.id === proposal.from)?.name || 'Bot',
-            to: target.name
-          }]
+          events: [{ type: 'trade-complete', from: fromName, to: target.name }]
         });
-        addRoomLog(room, `🤝 ${target.name} accepted a trade offer from a bot.`);
+      } else {
+        // Record the decline so the bot cools down
+        if (proposal._group) room.botHandler.recordDecline(proposal.from, proposal._group);
       }
       delete room.pendingTrades[proposal.id];
       done();
     } else {
-      // Bot proposes trade to human — show popup, wait up to 30s for response
+      // Target is human: pause game, show offer, wait for response
+      room.tradePaused = true;
       io.to(proposal.to).emit('trade-offer', proposal);
-      addRoomLog(room, `🤝 A bot proposed a trade to ${target.name}.`);
+      addRoomLog(room, `🤝 ${state.players.find(p=>p.id===proposal.from)?.name||'Bot'} proposed a trade to ${target.name}.`);
 
-      // Auto-expire after 30 seconds if no response
+      // Auto-expire after 45 seconds — resume game even if human ignores
       setTimeout(() => {
         if (room.pendingTrades && room.pendingTrades[proposal.id]) {
           delete room.pendingTrades[proposal.id];
+          room.tradePaused = false;
+          io.to(proposal.to).emit('trade-result', { accepted: false, tradeId: proposal.id });
+          addRoomLog(room, `⏱ Trade offer expired.`);
         }
-      }, 30000);
+      }, 45000);
 
-      // Don't block — done() immediately so the next bot turn isn't held up
-      done();
+      done(); // don't block next bot turn on human response
     }
   }, 800);
 }
