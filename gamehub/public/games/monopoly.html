@@ -7,11 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    :root {
-      --gold:#c9a84c;--gold-light:#e8c97a;--gold-dim:#8a6d2f;
-      --dark:#060608;--dark-2:#0d0d12;--dark-3:#141420;--dark-4:#1c1c2e;
-      --text:#e8e4d8;--text-dim:#8a8070;
-    }
+    :root{--gold:#c9a84c;--gold-light:#e8c97a;--gold-dim:#8a6d2f;--dark:#060608;--dark-2:#0d0d12;--dark-3:#141420;--dark-4:#1c1c2e;--text:#e8e4d8;--text-dim:#8a8070;}
     *{margin:0;padding:0;box-sizing:border-box;}
     html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:var(--text);font-family:'Space Mono',monospace;}
 
@@ -25,19 +21,19 @@
     .room-pill strong{color:var(--gold);}
     .timer-pill{font-size:.65rem;font-weight:700;letter-spacing:.1em;padding:.25rem .7rem;border:1px solid rgba(201,168,76,.2);min-width:60px;text-align:center;transition:color .3s,border-color .3s;}
     .timer-pill.urgent{color:#e74c3c;border-color:rgba(231,76,60,.4);animation:timerPulse 1s infinite;}
+    .timer-pill.paused{color:#4c6bc9;border-color:rgba(76,107,201,.4);}
     @keyframes timerPulse{0%,100%{opacity:1}50%{opacity:.5}}
 
     /* LAYOUT */
-    .game-wrap{display:flex;width:100%;height:calc(100vh - 48px);margin-top:48px;}
+    .game-wrap{display:flex;width:100%;height:calc(100vh - 48px);margin-top:48px;position:relative;}
     .sidebar{width:220px;flex-shrink:0;background:var(--dark-2);border-right:1px solid rgba(201,168,76,.08);display:flex;flex-direction:column;overflow:hidden;}
     .sidebar-right{border-right:none;border-left:1px solid rgba(201,168,76,.08);}
     .sb-sec{border-bottom:1px solid rgba(201,168,76,.06);padding:.8rem;}
     .sb-label{font-size:.5rem;letter-spacing:.3em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.6rem;}
 
     /* 3D BOARD */
-    .board-viewport{flex:1;position:relative;overflow:hidden;background:radial-gradient(ellipse at center,#0d1f0d 0%,#060608 70%);cursor:grab;}
-    .board-viewport:active{cursor:grabbing;}
-    .board-scene{position:absolute;top:50%;left:50%;transform-style:preserve-3d;transform:translate(-50%,-50%) rotateX(52deg) rotateZ(0deg);transition:transform .04s linear;will-change:transform;}
+    .board-viewport{flex:1;position:relative;overflow:hidden;background:radial-gradient(ellipse at center,#0d1f0d 0%,#060608 70%);}
+    .board-scene{position:absolute;top:50%;left:50%;transform-style:preserve-3d;transform:translate(-50%,-50%) rotateX(52deg) rotateZ(0deg) scale(1);will-change:transform;}
     .board-3d{position:relative;transform-style:preserve-3d;}
     .board-3d::after{content:'';position:absolute;inset:-8px;background:rgba(0,0,0,.6);transform:translateZ(-12px);filter:blur(20px);}
     .board-face{position:absolute;inset:0;background:#0a2e0a;border:3px solid #8a6d2f;transform:translateZ(0);}
@@ -45,35 +41,53 @@
     .board-side-r{position:absolute;top:0;bottom:0;right:-12px;width:12px;background:#091a09;border:1px solid #5a4d2f;transform-origin:left;transform:rotateY(90deg);}
 
     /* SQUARES */
-    .sq{position:absolute;border:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;overflow:hidden;cursor:pointer;transition:background .15s;box-sizing:border-box;}
+    .sq{position:absolute;border:1px solid rgba(255,255,255,.08);overflow:hidden;cursor:pointer;transition:background .15s;box-sizing:border-box;}
     .sq:hover{background:rgba(255,255,255,.07);}
-    .color-band{position:absolute;background:currentColor;}
+
+    /* Color bands */
+    .color-band{position:absolute;flex-shrink:0;}
     .sq.south .color-band{top:0;left:0;right:0;height:22%;}
     .sq.north .color-band{bottom:0;left:0;right:0;height:22%;}
     .sq.west  .color-band{top:0;right:0;bottom:0;width:22%;}
     .sq.east  .color-band{top:0;left:0;bottom:0;width:22%;}
-    /* Inner text: always in the non-band area */
-    .sq-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;position:absolute;left:0;right:0;bottom:0;gap:1px;padding:2px;}
-    .sq.south .sq-inner{top:22%;bottom:0;}
-    .sq.north .sq-inner{top:0;bottom:22%;}
-    .sq.west  .sq-inner{top:0;bottom:0;left:0;right:22%;writing-mode:vertical-rl;transform:rotate(180deg);}
-    .sq.east  .sq-inner{top:0;bottom:0;left:22%;right:0;writing-mode:vertical-rl;transform:rotate(0deg);}
-    .sq-name{font-size:clamp(5px,.55vw,8px);text-align:center;line-height:1.2;color:rgba(232,228,216,.9);word-break:break-word;hyphens:auto;}
-    .sq-price{font-size:clamp(4px,.45vw,6px);color:var(--gold-dim);}
-    .sq.corner{align-items:center;justify-content:center;flex-direction:column;gap:2px;}
-    .sq.corner .corner-icon{font-size:clamp(14px,2.2vw,28px);line-height:1;}
-    .sq.corner .corner-label{font-size:clamp(5px,.55vw,8px);letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);text-align:center;line-height:1.3;}
+
+    /* Text inner — faces outward for each side */
+    .sq-inner{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:3px;}
+    /* south: color band at top, text at bottom — text upright, readable from south */
+    .sq.south .sq-inner{top:23%;left:0;right:0;bottom:0;}
+    /* north: color band at bottom, text at top — text upside-down so it reads from north */
+    .sq.north .sq-inner{top:0;left:0;right:0;bottom:23%;transform:rotate(180deg);}
+    /* east: color band at left, text to right — reads from east (right side) */
+    .sq.east  .sq-inner{top:0;bottom:0;left:23%;right:0;writing-mode:vertical-lr;transform:rotate(180deg);}
+    /* west: color band at right, text to left — reads from west (left side) */
+    .sq.west  .sq-inner{top:0;bottom:0;left:0;right:23%;writing-mode:vertical-rl;transform:rotate(0deg);}
+
+    .sq-name{font-size:clamp(5px,.56vw,8px);text-align:center;line-height:1.2;color:rgba(232,228,216,.9);word-break:break-word;hyphens:auto;}
+    .sq-price{font-size:clamp(4px,.44vw,6.5px);color:var(--gold-dim);}
+
+    /* Corners */
+    .sq.corner{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
+    .corner-icon{font-size:clamp(14px,2.2vw,28px);line-height:1;}
+    .corner-label{font-size:clamp(5px,.56vw,8px);letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);text-align:center;line-height:1.3;}
+    /* Rotate corner labels to face outward */
+    .sq.corner[data-id="10"] .corner-label,
+    .sq.corner[data-id="10"] .corner-icon{transform:rotate(-45deg);}
+    .sq.corner[data-id="20"] .corner-label,
+    .sq.corner[data-id="20"] .corner-icon{transform:rotate(-90deg);}  /* top-left faces left-upward */
+    .sq.corner[data-id="30"] .corner-label,
+    .sq.corner[data-id="30"] .corner-icon{transform:rotate(180deg);}
 
     /* Owner ring */
     .owner-ring{position:absolute;bottom:2px;right:2px;width:clamp(5px,.8vw,9px);height:clamp(5px,.8vw,9px);border-radius:50%;border:1px solid rgba(0,0,0,.5);transition:background .3s;}
     /* Mortgage overlay */
-    .mortgage-overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:clamp(6px,.7vw,10px);color:#e74c3c;pointer-events:none;font-weight:700;}
+    .mortgage-overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:clamp(7px,.8vw,11px);color:#e74c3c;pointer-events:none;font-weight:700;}
+
     /* Houses */
-    .house-row{position:absolute;display:flex;gap:1px;pointer-events:none;}
-    .sq.south .house-row{top:23%;left:0;right:0;justify-content:center;}
-    .sq.north .house-row{bottom:23%;left:0;right:0;justify-content:center;}
-    .sq.west  .house-row{right:23%;top:0;bottom:0;flex-direction:column;align-items:center;justify-content:center;}
-    .sq.east  .house-row{left:23%;top:0;bottom:0;flex-direction:column;align-items:center;justify-content:center;}
+    .house-row{position:absolute;display:flex;gap:1px;pointer-events:none;z-index:2;}
+    .sq.south .house-row{top:2%;left:0;right:0;justify-content:center;}
+    .sq.north .house-row{bottom:2%;left:0;right:0;justify-content:center;}
+    .sq.west  .house-row{right:2%;top:0;bottom:0;flex-direction:column;align-items:center;justify-content:center;}
+    .sq.east  .house-row{left:2%;top:0;bottom:0;flex-direction:column;align-items:center;justify-content:center;}
     .h-icon{width:clamp(3px,.5vw,6px);height:clamp(3px,.5vw,6px);background:#2ecc71;border-radius:1px;}
     .h-icon.hotel{background:#e74c3c;border-radius:50%;}
 
@@ -145,61 +159,73 @@
     .prop-name-sm{font-size:.52rem;color:var(--text-dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .prop-badge{font-size:.45rem;}
 
-    /* PROPERTY POPUP */
-    .prop-popup{position:fixed;z-index:500;background:var(--dark-3);border:1px solid rgba(201,168,76,.25);padding:1.5rem;width:300px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.8);opacity:0;transform:scale(.93);pointer-events:none;transition:all .2s;}
-    .prop-popup.show{opacity:1;transform:scale(1);pointer-events:all;}
-    .pp-color-bar{height:7px;margin:-1.5rem -1.5rem 1rem;}
-    .pp-name{font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:var(--gold);margin-bottom:.2rem;}
-    .pp-type{font-size:.5rem;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.8rem;}
-    .pp-row{display:flex;justify-content:space-between;font-size:.6rem;padding:.22rem 0;border-bottom:1px solid rgba(201,168,76,.05);}
+    /* PROPERTY POPUP — anchored top-right of board area, not over board */
+    .prop-popup{position:fixed;z-index:500;background:var(--dark-3);border:1px solid rgba(201,168,76,.25);padding:1.2rem;width:270px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.8);opacity:0;transform:translateY(-8px);pointer-events:none;transition:all .2s;right:230px;top:56px;}
+    .prop-popup.show{opacity:1;transform:translateY(0);pointer-events:all;}
+    .pp-color-bar{height:6px;margin:-1.2rem -1.2rem .9rem;}
+    .pp-name{font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:var(--gold);margin-bottom:.2rem;}
+    .pp-type{font-size:.48rem;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.7rem;}
+    .pp-row{display:flex;justify-content:space-between;font-size:.58rem;padding:.2rem 0;border-bottom:1px solid rgba(201,168,76,.05);}
     .pp-row span:last-child{color:var(--gold);font-weight:700;}
-    .pp-sec{font-size:.48rem;letter-spacing:.25em;text-transform:uppercase;color:var(--text-dim);margin:.7rem 0 .25rem;}
-    .pp-close{position:absolute;top:.6rem;right:.7rem;background:none;border:none;color:var(--text-dim);font-size:1rem;cursor:pointer;}
+    .pp-sec{font-size:.45rem;letter-spacing:.25em;text-transform:uppercase;color:var(--text-dim);margin:.65rem 0 .2rem;}
+    .pp-close{position:absolute;top:.5rem;right:.6rem;background:none;border:none;color:var(--text-dim);font-size:.9rem;cursor:pointer;}
     .pp-close:hover{color:var(--text);}
-    .pp-owner{display:inline-flex;align-items:center;gap:.4rem;font-size:.6rem;padding:.25rem .6rem;border:1px solid rgba(201,168,76,.2);margin-top:.4rem;}
+    .pp-owner{display:inline-flex;align-items:center;gap:.4rem;font-size:.58rem;padding:.2rem .55rem;border:1px solid rgba(201,168,76,.2);margin-top:.35rem;}
 
-    /* MODAL */
-    .modal-overlay{position:fixed;inset:0;z-index:600;background:rgba(6,6,8,.85);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;}
-    .modal-overlay.open{opacity:1;pointer-events:all;}
-    .modal-box{background:var(--dark-3);border:1px solid rgba(201,168,76,.2);padding:2rem;max-width:420px;width:90%;transform:translateY(14px);transition:transform .25s;max-height:90vh;overflow-y:auto;}
-    .modal-overlay.open .modal-box{transform:translateY(0);}
-    .modal-title{font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:var(--gold);margin-bottom:.25rem;}
-    .modal-sub{font-size:.52rem;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.2rem;}
-    .modal-row{display:flex;justify-content:space-between;align-items:center;font-size:.62rem;padding:.25rem 0;border-bottom:1px solid rgba(201,168,76,.06);}
-    .modal-actions{display:flex;gap:.7rem;margin-top:1.3rem;}
-
-    /* TRADE */
-    .trade-modal{max-width:560px;}
-    .trade-cols{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;}
-    .trade-col-title{font-size:.52rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem;text-align:center;}
-    .trade-prop-list{max-height:150px;overflow-y:auto;}
-    .trade-prop{display:flex;align-items:center;gap:.4rem;padding:.25rem;cursor:pointer;border:1px solid transparent;margin-bottom:2px;font-size:.6rem;transition:all .15s;}
+    /* TRADE DRAWER — slides in from right, sits on top of right sidebar, board still visible */
+    .trade-drawer{position:fixed;top:48px;right:0;bottom:0;width:320px;background:var(--dark-2);border-left:1px solid rgba(201,168,76,.2);transform:translateX(100%);transition:transform .3s cubic-bezier(.25,.46,.45,.94);z-index:400;display:flex;flex-direction:column;overflow:hidden;}
+    .trade-drawer.open{transform:translateX(0);}
+    .td-header{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1rem;border-bottom:1px solid rgba(201,168,76,.1);flex-shrink:0;}
+    .td-title{font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:var(--gold);}
+    .td-close{background:none;border:none;color:var(--text-dim);font-size:1.1rem;cursor:pointer;padding:.2rem;}
+    .td-close:hover{color:var(--text);}
+    .td-body{flex:1;overflow-y:auto;padding:1rem;}
+    .td-section{margin-bottom:1rem;}
+    .td-sec-label{font-size:.48rem;letter-spacing:.25em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:.5rem;}
+    .trade-target-sel{width:100%;background:var(--dark-4);border:1px solid rgba(201,168,76,.15);padding:.4rem .5rem;color:var(--text);font-family:'Space Mono',monospace;font-size:.62rem;outline:none;margin-bottom:.8rem;}
+    .trade-cols{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:.8rem;}
+    .trade-col-title{font-size:.5rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem;text-align:center;}
+    .trade-prop-list{max-height:130px;overflow-y:auto;}
+    .trade-prop{display:flex;align-items:center;gap:.35rem;padding:.22rem .3rem;cursor:pointer;border:1px solid transparent;margin-bottom:2px;font-size:.58rem;transition:all .15s;border-radius:2px;}
     .trade-prop:hover{background:rgba(201,168,76,.05);}
     .trade-prop.sel{border-color:var(--gold);background:rgba(201,168,76,.08);}
-    .trade-money-row{display:flex;gap:.4rem;align-items:center;margin-top:.4rem;}
-    .trade-input{flex:1;background:var(--dark-4);border:1px solid rgba(201,168,76,.15);padding:.4rem .5rem;color:var(--text);font-family:'Space Mono',monospace;font-size:.7rem;outline:none;}
-    .trade-target-sel{width:100%;background:var(--dark-4);border:1px solid rgba(201,168,76,.15);padding:.4rem .5rem;color:var(--text);font-family:'Space Mono',monospace;font-size:.65rem;outline:none;margin-bottom:.7rem;}
-    .trade-summary{background:var(--dark-4);border:1px solid rgba(201,168,76,.1);padding:.7rem;margin-top:.7rem;font-size:.6rem;line-height:1.8;color:var(--text-dim);}
+    .trade-money-row{display:flex;gap:.3rem;align-items:center;margin-top:.4rem;}
+    .trade-input{flex:1;background:var(--dark-4);border:1px solid rgba(201,168,76,.15);padding:.35rem .4rem;color:var(--text);font-family:'Space Mono',monospace;font-size:.65rem;outline:none;}
+    .trade-summary{background:var(--dark-4);border:1px solid rgba(201,168,76,.1);padding:.6rem;margin-bottom:.8rem;font-size:.58rem;line-height:1.8;color:var(--text-dim);}
+    .td-footer{padding:.8rem 1rem;border-top:1px solid rgba(201,168,76,.1);flex-shrink:0;display:flex;gap:.5rem;}
 
-    /* INCOMING TRADE */
-    .trade-offer-section{background:var(--dark-4);border:1px solid rgba(201,168,76,.1);padding:.8rem;margin:.4rem 0;}
-    .trade-offer-title{font-size:.48rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:.35rem;}
-    .trade-offer-item{font-size:.62rem;color:var(--text);padding:.12rem 0;}
+    /* INCOMING TRADE — also a drawer */
+    .incoming-drawer{position:fixed;top:48px;right:0;bottom:0;width:300px;background:var(--dark-2);border-left:1px solid rgba(201,168,76,.25);transform:translateX(100%);transition:transform .3s cubic-bezier(.25,.46,.45,.94);z-index:410;display:flex;flex-direction:column;}
+    .incoming-drawer.open{transform:translateX(0);}
+    .trade-offer-section{background:var(--dark-4);border:1px solid rgba(201,168,76,.1);padding:.7rem;margin:.4rem 0;border-radius:2px;}
+    .trade-offer-title{font-size:.46rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:.3rem;}
+    .trade-offer-item{font-size:.6rem;color:var(--text);padding:.1rem 0;}
+    /* Pause overlay on board when trade pending */
+    .trade-pause-banner{position:absolute;bottom:0;left:0;right:0;background:rgba(76,107,201,.15);border-top:1px solid rgba(76,107,201,.3);padding:.4rem;text-align:center;font-size:.58rem;color:#4c6bc9;letter-spacing:.1em;pointer-events:none;z-index:5;display:none;}
+    .trade-pause-banner.show{display:block;}
 
-    /* BANKRUPT */
-    .bankrupt-warn{background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.2);padding:.8rem;margin-bottom:1rem;font-size:.62rem;color:#e74c3c;line-height:1.7;}
+    /* BUY / BANKRUPT modals — small, non-blocking */
+    .modal-overlay{position:fixed;inset:0;z-index:600;background:rgba(6,6,8,.75);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;}
+    .modal-overlay.open{opacity:1;pointer-events:all;}
+    .modal-box{background:var(--dark-3);border:1px solid rgba(201,168,76,.2);padding:1.8rem;max-width:380px;width:90%;transform:translateY(12px);transition:transform .25s;max-height:88vh;overflow-y:auto;}
+    .modal-overlay.open .modal-box{transform:translateY(0);}
+    .modal-title{font-family:'Cormorant Garamond',serif;font-size:1.7rem;color:var(--gold);margin-bottom:.2rem;}
+    .modal-sub{font-size:.5rem;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.1rem;}
+    .modal-row{display:flex;justify-content:space-between;align-items:center;font-size:.6rem;padding:.22rem 0;border-bottom:1px solid rgba(201,168,76,.06);}
+    .modal-actions{display:flex;gap:.6rem;margin-top:1.1rem;}
+    .bankrupt-warn{background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.2);padding:.7rem;margin-bottom:.9rem;font-size:.6rem;color:#e74c3c;line-height:1.7;}
 
     /* CARD FLASH */
     .card-flash{position:fixed;inset:0;z-index:700;background:rgba(6,6,8,.88);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s;}
     .card-flash.show{opacity:1;pointer-events:all;}
-    .card-inner{background:var(--dark-3);border:2px solid var(--gold-dim);padding:2.5rem;max-width:340px;text-align:center;transform:rotate(-2deg) scale(.95);transition:transform .3s;}
+    .card-inner{background:var(--dark-3);border:2px solid var(--gold-dim);padding:2.2rem;max-width:320px;text-align:center;transform:rotate(-2deg) scale(.95);transition:transform .3s;}
     .card-flash.show .card-inner{transform:rotate(-1deg) scale(1);}
     .card-inner.community{border-color:#4c6bc9;}
-    .card-type-lbl{font-size:.5rem;letter-spacing:.35em;text-transform:uppercase;margin-bottom:.8rem;}
+    .card-type-lbl{font-size:.48rem;letter-spacing:.35em;text-transform:uppercase;margin-bottom:.7rem;}
     .card-type-lbl.chance{color:var(--gold);}
     .card-type-lbl.community{color:#4c6bc9;}
-    .card-text-big{font-family:'Cormorant Garamond',serif;font-size:1.4rem;line-height:1.5;margin-bottom:1.2rem;}
-    .card-dismiss{font-size:.52rem;color:var(--text-dim);letter-spacing:.15em;}
+    .card-text-big{font-family:'Cormorant Garamond',serif;font-size:1.35rem;line-height:1.5;margin-bottom:1.1rem;}
+    .card-dismiss{font-size:.5rem;color:var(--text-dim);letter-spacing:.15em;}
 
     /* AUCTION */
     .auction-box{background:rgba(201,168,76,.04);border:1px solid rgba(201,168,76,.2);padding:.8rem;margin:.4rem;margin-top:0;}
@@ -211,7 +237,7 @@
 
     /* TOASTS */
     .toast-container{position:fixed;top:60px;right:1rem;z-index:999;display:flex;flex-direction:column;gap:.4rem;pointer-events:none;}
-    .toast{background:var(--dark-3);border-left:3px solid var(--gold);padding:.6rem 1rem;min-width:220px;max-width:300px;font-size:.6rem;line-height:1.5;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,.6);transform:translateX(120%);opacity:0;transition:transform .3s cubic-bezier(.25,.46,.45,.94),opacity .3s;}
+    .toast{background:var(--dark-3);border-left:3px solid var(--gold);padding:.6rem 1rem;min-width:200px;max-width:280px;font-size:.6rem;line-height:1.5;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,.6);transform:translateX(120%);opacity:0;transition:transform .3s cubic-bezier(.25,.46,.45,.94),opacity .3s;}
     .toast.show{transform:translateX(0);opacity:1;}
     .toast.hide{transform:translateX(120%);opacity:0;}
     .toast.t-rent{border-left-color:#e74c3c;}
@@ -239,6 +265,9 @@
     .ws-waiting{font-size:.5rem;color:var(--text-dim);animation:pulse 1.5s infinite;}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
+    /* ZOOM HINT */
+    .board-hint{position:absolute;bottom:.7rem;left:50%;transform:translateX(-50%);font-size:.48rem;color:rgba(232,228,216,.2);letter-spacing:.12em;pointer-events:none;white-space:nowrap;}
+
     /* GAME OVER */
     .gameover-screen{display:none;position:fixed;inset:0;z-index:800;background:rgba(6,6,8,.95);backdrop-filter:blur(12px);flex-direction:column;align-items:center;justify-content:center;gap:1rem;}
     .gameover-screen.show{display:flex;}
@@ -259,9 +288,8 @@
     .manage-header{font-size:.62rem;color:var(--gold);margin-bottom:.45rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
     ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--gold-dim);}
-
     @media(max-width:900px){.sidebar{width:180px;}}
-    @media(max-width:680px){.sidebar:first-child{display:none;}.sidebar-right{width:155px;}}
+    @media(max-width:680px){.sidebar:first-child{display:none;}.sidebar-right{width:155px;}.trade-drawer,.incoming-drawer{width:260px;}}
   </style>
 </head>
 <body>
@@ -286,7 +314,7 @@
   <div class="ws-hint">Share this code to invite friends</div>
   <div class="ws-players" id="wsPlayers"></div>
   <button class="action-btn" id="readyBtn" style="max-width:180px" onclick="sendReady()">I'm Ready →</button>
-  <div class="ws-waiting" id="wsStatus">Waiting for players to ready up…</div>
+  <div class="ws-waiting">Waiting for players to ready up…</div>
 </div>
 
 <!-- GAME WRAP -->
@@ -320,7 +348,7 @@
       <button class="action-btn sec" id="endTurnBtn" onclick="doAction('end-turn')" style="display:none">End Turn →</button>
       <button class="action-btn sec" id="payJailBtn" onclick="doAction('pay-jail')" style="display:none">💰 Pay $50 Bail</button>
       <button class="action-btn sec" id="jailCardBtn" onclick="doAction('use-jail-card')" style="display:none">🃏 Use Jail Card</button>
-      <button class="action-btn trade-b" id="tradeBtn" onclick="openTradeModal()" style="display:none">🤝 Propose Trade</button>
+      <button class="action-btn trade-b" id="tradeBtn" onclick="openTradeDrawer()" style="display:none">🤝 Propose Trade</button>
       <button class="action-btn danger" id="bankruptBtn" onclick="openBankruptModal()" style="display:none">☠️ Bankruptcy</button>
     </div>
     <div id="auctionSection" style="display:none">
@@ -339,7 +367,7 @@
     <div class="game-log" id="gameLog"><div class="log-entry" style="color:var(--gold-dim)">Game log…</div></div>
   </div>
 
-  <!-- 3D BOARD -->
+  <!-- 3D BOARD VIEWPORT -->
   <div class="board-viewport" id="boardViewport">
     <div class="board-scene" id="boardScene">
       <div class="board-3d" id="board3d">
@@ -355,7 +383,8 @@
         </div>
       </div>
     </div>
-    <div style="position:absolute;bottom:.7rem;left:50%;transform:translateX(-50%);font-size:.5rem;color:rgba(232,228,216,.2);letter-spacing:.12em;pointer-events:none">Right-click drag or touch drag to rotate</div>
+    <div class="board-hint" id="boardHint">Scroll to zoom · Right-click drag or touch to rotate</div>
+    <div class="trade-pause-banner" id="tradePauseBanner">⏸ Game paused — trade offer pending</div>
   </div>
 
   <!-- RIGHT SIDEBAR -->
@@ -367,8 +396,8 @@
     <div class="manage-panel" id="managePanel" style="display:none">
       <div class="sb-label">Manage</div>
       <div class="manage-header" id="managePropName">—</div>
-      <button class="action-btn" id="buildBtn" onclick="buildHouse()">🏠 Build House</button>
-      <button class="action-btn sec" id="sellHouseBtn" onclick="sellHouse()">💸 Sell House</button>
+      <button class="action-btn" onclick="buildHouse()">🏠 Build House</button>
+      <button class="action-btn sec" onclick="sellHouse()">💸 Sell House</button>
       <button class="action-btn sec" id="mortgageBtn" onclick="mortgageProp()">🔒 Mortgage</button>
       <button class="action-btn sec" id="unmortgageBtn" onclick="unmortgageProp()" style="display:none">🔓 Unmortgage</button>
     </div>
@@ -379,15 +408,15 @@
     <div class="sb-sec">
       <div class="sb-label">Legend</div>
       <div style="display:flex;flex-wrap:wrap;gap:.3rem">
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#8B4513;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">Brown</span></div>
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#87CEEB;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">Lt.Blue</span></div>
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#FF69B4;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">Pink</span></div>
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#FF8C00;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">Orange</span></div>
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#DC143C;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">Red</span></div>
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#FFD700;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">Yellow</span></div>
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#228B22;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">Green</span></div>
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#00008B;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">Dk.Blue</span></div>
-        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#888;border-radius:2px"></div><span style="font-size:.45rem;color:var(--text-dim)">RR/Util</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#8B4513;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">Brown</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#87CEEB;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">Lt.Blue</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#FF69B4;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">Pink</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#FF8C00;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">Orange</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#DC143C;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">Red</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#FFD700;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">Yellow</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#228B22;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">Green</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#00008B;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">Dk.Blue</span></div>
+        <div style="display:flex;align-items:center;gap:.2rem"><div style="width:8px;height:8px;background:#888;border-radius:2px"></div><span style="font-size:.44rem;color:var(--text-dim)">RR/Util</span></div>
       </div>
     </div>
   </div>
@@ -400,6 +429,66 @@
   <div class="pp-name" id="ppName"></div>
   <div class="pp-type" id="ppType"></div>
   <div id="ppContent"></div>
+</div>
+
+<!-- TRADE DRAWER (slides from right, board still visible) -->
+<div class="trade-drawer" id="tradeDrawer">
+  <div class="td-header">
+    <div class="td-title">🤝 Propose Trade</div>
+    <button class="td-close" onclick="closeTradeDrawer()">✕</button>
+  </div>
+  <div class="td-body">
+    <div class="td-section">
+      <div class="td-sec-label">Trade with</div>
+      <select class="trade-target-sel" id="tradeTarget"></select>
+    </div>
+    <div class="trade-cols">
+      <div>
+        <div class="trade-col-title">You Offer</div>
+        <div class="trade-prop-list" id="offerProps"></div>
+        <div class="trade-money-row">
+          <span style="font-size:.5rem;color:var(--text-dim)">+$</span>
+          <input type="number" class="trade-input" id="offerMoney" placeholder="0" min="0" oninput="updateTradeSummary()">
+        </div>
+      </div>
+      <div>
+        <div class="trade-col-title">You Request</div>
+        <div class="trade-prop-list" id="requestProps"></div>
+        <div class="trade-money-row">
+          <span style="font-size:.5rem;color:var(--text-dim)">+$</span>
+          <input type="number" class="trade-input" id="requestMoney" placeholder="0" min="0" oninput="updateTradeSummary()">
+        </div>
+      </div>
+    </div>
+    <div class="trade-summary" id="tradeSummary">Select items above…</div>
+  </div>
+  <div class="td-footer">
+    <button class="action-btn" style="margin:0" onclick="sendTrade()">Send Offer</button>
+    <button class="action-btn sec" style="margin:0" onclick="closeTradeDrawer()">Cancel</button>
+  </div>
+</div>
+
+<!-- INCOMING TRADE DRAWER -->
+<div class="incoming-drawer" id="incomingDrawer">
+  <div class="td-header">
+    <div class="td-title">🤝 Trade Offer</div>
+  </div>
+  <div class="td-body">
+    <div class="td-sec-label" id="incomingTradeFrom">From: —</div>
+    <div class="trade-offer-section">
+      <div class="trade-offer-title">They Offer You</div>
+      <div id="incomingOfferList"></div>
+    </div>
+    <div class="trade-offer-section">
+      <div class="trade-offer-title">They Want From You</div>
+      <div id="incomingRequestList"></div>
+    </div>
+    <p style="font-size:.52rem;color:var(--text-dim);margin-top:.8rem;line-height:1.7">You can click squares on the board to inspect properties before deciding.</p>
+  </div>
+  <div class="td-footer">
+    <button class="action-btn" style="margin:0" onclick="respondTrade(true)">✓ Accept</button>
+    <button class="action-btn danger" style="margin:0" onclick="respondTrade(false)">✗ Decline</button>
+  </div>
 </div>
 
 <!-- BUY MODAL -->
@@ -415,65 +504,13 @@
   </div>
 </div>
 
-<!-- TRADE MODAL -->
-<div class="modal-overlay" id="tradeModal">
-  <div class="modal-box trade-modal">
-    <div class="modal-title">🤝 Propose Trade</div>
-    <div class="modal-sub">Select what to offer and request</div>
-    <select class="trade-target-sel" id="tradeTarget"></select>
-    <div class="trade-cols">
-      <div>
-        <div class="trade-col-title">You Offer</div>
-        <div class="trade-prop-list" id="offerProps"></div>
-        <div class="trade-money-row">
-          <span style="font-size:.52rem;color:var(--text-dim)">+ Cash:</span>
-          <input type="number" class="trade-input" id="offerMoney" placeholder="$0" min="0" oninput="updateTradeSummary()">
-        </div>
-      </div>
-      <div>
-        <div class="trade-col-title">You Request</div>
-        <div class="trade-prop-list" id="requestProps"></div>
-        <div class="trade-money-row">
-          <span style="font-size:.52rem;color:var(--text-dim)">+ Cash:</span>
-          <input type="number" class="trade-input" id="requestMoney" placeholder="$0" min="0" oninput="updateTradeSummary()">
-        </div>
-      </div>
-    </div>
-    <div class="trade-summary" id="tradeSummary">Select items above…</div>
-    <div class="modal-actions">
-      <button class="action-btn" onclick="sendTrade()">Send Offer</button>
-      <button class="action-btn sec" onclick="closeModal('tradeModal')">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- INCOMING TRADE MODAL -->
-<div class="modal-overlay" id="incomingTradeModal">
-  <div class="modal-box">
-    <div class="modal-title">🤝 Trade Offer</div>
-    <div class="modal-sub" id="incomingTradeFrom">From: —</div>
-    <div class="trade-offer-section">
-      <div class="trade-offer-title">They Offer You</div>
-      <div id="incomingOfferList"></div>
-    </div>
-    <div class="trade-offer-section">
-      <div class="trade-offer-title">They Want From You</div>
-      <div id="incomingRequestList"></div>
-    </div>
-    <div class="modal-actions">
-      <button class="action-btn" onclick="respondTrade(true)">✓ Accept</button>
-      <button class="action-btn danger" onclick="respondTrade(false)">✗ Decline</button>
-    </div>
-  </div>
-</div>
-
 <!-- BANKRUPTCY MODAL -->
 <div class="modal-overlay" id="bankruptModal">
   <div class="modal-box">
     <div class="modal-title">☠️ Bankruptcy</div>
     <div class="modal-sub">You're in debt</div>
     <div class="bankrupt-warn" id="bankruptWarn"></div>
-    <p style="font-size:.6rem;color:var(--text-dim);line-height:1.7;margin-bottom:1rem">Sell houses or mortgage properties from the right panel to raise funds, or declare bankruptcy to exit.</p>
+    <p style="font-size:.6rem;color:var(--text-dim);line-height:1.7;margin-bottom:1rem">Sell houses or mortgage properties to raise funds, or declare bankruptcy to exit.</p>
     <div class="modal-actions">
       <button class="action-btn danger" onclick="doAction('declare-bankruptcy');closeModal('bankruptModal')">Declare Bankruptcy</button>
       <button class="action-btn sec" onclick="closeModal('bankruptModal')">Raise Funds</button>
@@ -501,214 +538,296 @@
 </div>
 
 <script>
-// ═══ CONSTANTS ════════════════════════════════════════════════
-const BD = [
-  {id:0,  name:'GO',type:'go'},
-  {id:1,  name:'Mediterranean Ave',type:'property',group:'brown',    price:60, rent:[2,10,30,90,160,250],  hc:50, m:30},
-  {id:2,  name:'Community Chest',  type:'community'},
-  {id:3,  name:'Baltic Ave',       type:'property',group:'brown',    price:60, rent:[4,20,60,180,320,450], hc:50, m:30},
-  {id:4,  name:'Income Tax',       type:'tax',amount:200},
-  {id:5,  name:'Reading Railroad', type:'railroad',price:200,m:100},
-  {id:6,  name:'Oriental Ave',     type:'property',group:'lightblue',price:100,rent:[6,30,90,270,400,550], hc:50, m:50},
-  {id:7,  name:'Chance',           type:'chance'},
-  {id:8,  name:'Vermont Ave',      type:'property',group:'lightblue',price:100,rent:[6,30,90,270,400,550], hc:50, m:50},
-  {id:9,  name:'Connecticut Ave',  type:'property',group:'lightblue',price:120,rent:[8,40,100,300,450,600],hc:50, m:60},
-  {id:10, name:'Jail',             type:'jail'},
-  {id:11, name:'St. Charles Pl',   type:'property',group:'pink',     price:140,rent:[10,50,150,450,625,750],hc:100,m:70},
-  {id:12, name:'Electric Co.',     type:'utility', price:150,m:75},
-  {id:13, name:'States Ave',       type:'property',group:'pink',     price:140,rent:[10,50,150,450,625,750],hc:100,m:70},
-  {id:14, name:'Virginia Ave',     type:'property',group:'pink',     price:160,rent:[12,60,180,500,700,900],hc:100,m:80},
-  {id:15, name:'Pennsylvania RR',  type:'railroad',price:200,m:100},
-  {id:16, name:'St. James Pl',     type:'property',group:'orange',   price:180,rent:[14,70,200,550,750,950],hc:100,m:90},
-  {id:17, name:'Community Chest',  type:'community'},
-  {id:18, name:'Tennessee Ave',    type:'property',group:'orange',   price:180,rent:[14,70,200,550,750,950],hc:100,m:90},
-  {id:19, name:'New York Ave',     type:'property',group:'orange',   price:200,rent:[16,80,220,600,800,1000],hc:100,m:100},
-  {id:20, name:'Free Parking',     type:'freeparking'},
-  {id:21, name:'Kentucky Ave',     type:'property',group:'red',      price:220,rent:[18,90,250,700,875,1050],hc:150,m:110},
-  {id:22, name:'Chance',           type:'chance'},
-  {id:23, name:'Indiana Ave',      type:'property',group:'red',      price:220,rent:[18,90,250,700,875,1050],hc:150,m:110},
-  {id:24, name:'Illinois Ave',     type:'property',group:'red',      price:240,rent:[20,100,300,750,925,1100],hc:150,m:120},
-  {id:25, name:'B&O Railroad',     type:'railroad',price:200,m:100},
-  {id:26, name:'Atlantic Ave',     type:'property',group:'yellow',   price:260,rent:[22,110,330,800,975,1150],hc:150,m:130},
-  {id:27, name:'Ventnor Ave',      type:'property',group:'yellow',   price:260,rent:[22,110,330,800,975,1150],hc:150,m:130},
-  {id:28, name:'Water Works',      type:'utility', price:150,m:75},
-  {id:29, name:'Marvin Gardens',   type:'property',group:'yellow',   price:280,rent:[24,120,360,850,1025,1200],hc:150,m:140},
-  {id:30, name:'Go To Jail',       type:'gotojail'},
-  {id:31, name:'Pacific Ave',      type:'property',group:'green',    price:300,rent:[26,130,390,900,1100,1275],hc:200,m:150},
-  {id:32, name:'N. Carolina Ave',  type:'property',group:'green',    price:300,rent:[26,130,390,900,1100,1275],hc:200,m:150},
-  {id:33, name:'Community Chest',  type:'community'},
-  {id:34, name:'Pennsylvania Ave', type:'property',group:'green',    price:320,rent:[28,150,450,1000,1200,1400],hc:200,m:160},
-  {id:35, name:'Short Line RR',    type:'railroad',price:200,m:100},
-  {id:36, name:'Chance',           type:'chance'},
-  {id:37, name:'Park Place',       type:'property',group:'darkblue', price:350,rent:[35,175,500,1100,1300,1500],hc:200,m:175},
-  {id:38, name:'Luxury Tax',       type:'tax',amount:100},
-  {id:39, name:'Boardwalk',        type:'property',group:'darkblue', price:400,rent:[50,200,600,1400,1700,2000],hc:200,m:200},
+// ═══ BOARD DATA ═══════════════════════════════════════════════
+const BD=[
+  {id:0, name:'GO',type:'go'},
+  {id:1, name:'Mediterranean Ave',type:'property',group:'brown',    price:60, rent:[2,10,30,90,160,250],  hc:50, m:30},
+  {id:2, name:'Community Chest',  type:'community'},
+  {id:3, name:'Baltic Ave',       type:'property',group:'brown',    price:60, rent:[4,20,60,180,320,450], hc:50, m:30},
+  {id:4, name:'Income Tax',       type:'tax',amount:200},
+  {id:5, name:'Reading RR',       type:'railroad',price:200,m:100},
+  {id:6, name:'Oriental Ave',     type:'property',group:'lightblue',price:100,rent:[6,30,90,270,400,550], hc:50, m:50},
+  {id:7, name:'Chance',           type:'chance'},
+  {id:8, name:'Vermont Ave',      type:'property',group:'lightblue',price:100,rent:[6,30,90,270,400,550], hc:50, m:50},
+  {id:9, name:'Connecticut Ave',  type:'property',group:'lightblue',price:120,rent:[8,40,100,300,450,600],hc:50, m:60},
+  {id:10,name:'Jail',             type:'jail'},
+  {id:11,name:'St. Charles Pl',   type:'property',group:'pink',     price:140,rent:[10,50,150,450,625,750],hc:100,m:70},
+  {id:12,name:'Electric Co.',     type:'utility', price:150,m:75},
+  {id:13,name:'States Ave',       type:'property',group:'pink',     price:140,rent:[10,50,150,450,625,750],hc:100,m:70},
+  {id:14,name:'Virginia Ave',     type:'property',group:'pink',     price:160,rent:[12,60,180,500,700,900],hc:100,m:80},
+  {id:15,name:'Pennsylvania RR',  type:'railroad',price:200,m:100},
+  {id:16,name:'St. James Pl',     type:'property',group:'orange',   price:180,rent:[14,70,200,550,750,950],hc:100,m:90},
+  {id:17,name:'Community Chest',  type:'community'},
+  {id:18,name:'Tennessee Ave',    type:'property',group:'orange',   price:180,rent:[14,70,200,550,750,950],hc:100,m:90},
+  {id:19,name:'New York Ave',     type:'property',group:'orange',   price:200,rent:[16,80,220,600,800,1000],hc:100,m:100},
+  {id:20,name:'Free Parking',     type:'freeparking'},
+  {id:21,name:'Kentucky Ave',     type:'property',group:'red',      price:220,rent:[18,90,250,700,875,1050],hc:150,m:110},
+  {id:22,name:'Chance',           type:'chance'},
+  {id:23,name:'Indiana Ave',      type:'property',group:'red',      price:220,rent:[18,90,250,700,875,1050],hc:150,m:110},
+  {id:24,name:'Illinois Ave',     type:'property',group:'red',      price:240,rent:[20,100,300,750,925,1100],hc:150,m:120},
+  {id:25,name:'B&O Railroad',     type:'railroad',price:200,m:100},
+  {id:26,name:'Atlantic Ave',     type:'property',group:'yellow',   price:260,rent:[22,110,330,800,975,1150],hc:150,m:130},
+  {id:27,name:'Ventnor Ave',      type:'property',group:'yellow',   price:260,rent:[22,110,330,800,975,1150],hc:150,m:130},
+  {id:28,name:'Water Works',      type:'utility', price:150,m:75},
+  {id:29,name:'Marvin Gardens',   type:'property',group:'yellow',   price:280,rent:[24,120,360,850,1025,1200],hc:150,m:140},
+  {id:30,name:'Go To Jail',       type:'gotojail'},
+  {id:31,name:'Pacific Ave',      type:'property',group:'green',    price:300,rent:[26,130,390,900,1100,1275],hc:200,m:150},
+  {id:32,name:'N. Carolina Ave',  type:'property',group:'green',    price:300,rent:[26,130,390,900,1100,1275],hc:200,m:150},
+  {id:33,name:'Community Chest',  type:'community'},
+  {id:34,name:'Pennsylvania Ave', type:'property',group:'green',    price:320,rent:[28,150,450,1000,1200,1400],hc:200,m:160},
+  {id:35,name:'Short Line RR',    type:'railroad',price:200,m:100},
+  {id:36,name:'Chance',           type:'chance'},
+  {id:37,name:'Park Place',       type:'property',group:'darkblue', price:350,rent:[35,175,500,1100,1300,1500],hc:200,m:175},
+  {id:38,name:'Luxury Tax',       type:'tax',amount:100},
+  {id:39,name:'Boardwalk',        type:'property',group:'darkblue', price:400,rent:[50,200,600,1400,1700,2000],hc:200,m:200},
 ];
 
-const GC = {brown:'#8B4513',lightblue:'#87CEEB',pink:'#FF69B4',orange:'#FF8C00',red:'#DC143C',yellow:'#FFD700',green:'#228B22',darkblue:'#00008B'};
-const PC = ['#c9a84c','#4c6bc9','#e74c3c','#2ecc71','#9b59b6','#e67e22'];
-const TOKENS = ['🎩','🚗','🐕','🚢','✈️','🏆','👠','🎸'];
-// Die rotation: rotateX, rotateY to show face value
-const DR = {1:{rx:0,ry:0},2:{rx:0,ry:-90},3:{rx:-90,ry:0},4:{rx:90,ry:0},5:{rx:0,ry:90},6:{rx:0,ry:180}};
+// Standard Monopoly board — going clockwise from GO (bottom-right):
+// Bottom row (south-facing): 0=GO(BR corner), 1-9 going left, 10=Jail(BL corner)
+// Left col  (west-facing):   11-19 going up
+// Top row   (north-facing):  20=FreeParking(TL corner), 21-29 going right, 30=GoToJail(TR corner)
+// Right col (east-facing):   31-39 going down
+//
+// SL: squareId -> [col(1-11), row(1-12), direction]
+// col 1=left, col 11=right; row 1=top, row 12=bottom
+const SL={
+  // Bottom row: GO at bottom-right (col11,row12), squares go right-to-left (col 10 down to 2), Jail at bottom-left (col1,row12)
+  0: [11,12,'corner'],  // GO — bottom-right
+  1: [10,12,'south'], 2:[9,12,'south'],  3:[8,12,'south'],  4:[7,12,'south'],  5:[6,12,'south'],
+  6: [5,12,'south'],  7:[4,12,'south'],  8:[3,12,'south'],  9:[2,12,'south'],
+  10:[1,12,'corner'],   // Jail — bottom-left
 
-// Board layout: squareId -> [col(1-11), row(1-12), direction]
-const SL = {
-  0:[1,12,'corner'],
-  1:[2,12,'south'],2:[3,12,'south'],3:[4,12,'south'],4:[5,12,'south'],5:[6,12,'south'],
-  6:[7,12,'south'],7:[8,12,'south'],8:[9,12,'south'],9:[10,12,'south'],
-  10:[11,12,'corner'],
-  11:[11,11,'east'],12:[11,10,'east'],13:[11,9,'east'],14:[11,8,'east'],15:[11,7,'east'],
-  16:[11,6,'east'],17:[11,5,'east'],18:[11,4,'east'],19:[11,3,'east'],
-  20:[11,2,'corner'],
-  21:[10,1,'north'],22:[9,1,'north'],23:[8,1,'north'],24:[7,1,'north'],25:[6,1,'north'],
-  26:[5,1,'north'],27:[4,1,'north'],28:[3,1,'north'],29:[2,1,'north'],
-  30:[1,1,'corner'],
-  31:[1,2,'west'],32:[1,3,'west'],33:[1,4,'west'],34:[1,5,'west'],35:[1,6,'west'],
-  36:[1,7,'west'],37:[1,8,'west'],38:[1,9,'west'],39:[1,10,'west'],
+  // Left col: 11 at bottom going up to 19 near top
+  11:[1,11,'west'], 12:[1,10,'west'], 13:[1,9,'west'], 14:[1,8,'west'], 15:[1,7,'west'],
+  16:[1,6,'west'],  17:[1,5,'west'],  18:[1,4,'west'], 19:[1,3,'west'],
+
+  // Top row: Free Parking at top-left (col1,row1), squares go left-to-right (col 2 to 10), GoToJail at top-right (col11,row1)
+  20:[1,1,'corner'],    // Free Parking — top-left
+  21:[2,1,'north'],  22:[3,1,'north'],  23:[4,1,'north'],  24:[5,1,'north'],  25:[6,1,'north'],
+  26:[7,1,'north'],  27:[8,1,'north'],  28:[9,1,'north'],  29:[10,1,'north'],
+  30:[11,1,'corner'],   // Go To Jail — top-right
+
+  // Right col: 31 at top going down to 39 near bottom
+  31:[11,2,'east'], 32:[11,3,'east'], 33:[11,4,'east'], 34:[11,5,'east'], 35:[11,6,'east'],
+  36:[11,7,'east'], 37:[11,8,'east'], 38:[11,9,'east'], 39:[11,10,'east'],
 };
 
+const GC={brown:'#8B4513',lightblue:'#87CEEB',pink:'#FF69B4',orange:'#FF8C00',red:'#DC143C',yellow:'#FFD700',green:'#228B22',darkblue:'#00008B'};
+const PC=['#c9a84c','#4c6bc9','#e74c3c','#2ecc71','#9b59b6','#e67e22'];
+const TOKENS=['🎩','🚗','🐕','🚢','✈️','🏆','👠','🎸'];
+const DR={1:{rx:0,ry:0},2:{rx:0,ry:-90},3:{rx:-90,ry:0},4:{rx:90,ry:0},5:{rx:0,ry:90},6:{rx:0,ry:180}};
+
+const BOARD_PX=560, CORNER_PX=80, INNER_PX=(BOARD_PX-CORNER_PX*2)/9;
+
 // ═══ STATE ════════════════════════════════════════════════════
-const params  = new URLSearchParams(location.search);
-const ROOM_ID = params.get('room');
-const MY_NAME = params.get('name') || 'Player';
-let socket, gameState, myPlayerId;
-let selectedSqId = null;
-let pendingTradeId = null;
-let selectedOfferProps = new Set();
-let selectedRequestProps = new Set();
-let rotZ = 0, isDragging = false, dragStartX = 0, dragStartZ = 0, touchStartX = 0, touchStartZ = 0;
-let timerInterval = null, timerSecs = 90;
+const params=new URLSearchParams(location.search);
+const ROOM_ID=params.get('room');
+const MY_NAME=params.get('name')||'Player';
+let socket,gameState,myPlayerId;
+let selectedSqId=null, pendingTradeId=null;
+let selectedOfferProps=new Set(), selectedRequestProps=new Set();
+// Rotation + zoom
+let rotZ=0, zoom=1.0;
+const ZOOM_MIN=0.55, ZOOM_MAX=2.2;
+let isDragging=false, dragStartX=0, dragStartZ=0;
+let touchStartX=0, touchStartZ=0;
+let lastPinchDist=null;
+// Timer
+let timerInterval=null, timerSecs=90, timerPaused=false;
+// Trade pause
+let tradePending=false;
 
-const BOARD_PX = 560, CORNER_PX = 80, INNER_PX = (BOARD_PX - CORNER_PX*2) / 9;
+document.getElementById('displayRoomCode').textContent=ROOM_ID||'???';
+document.getElementById('wsCode').textContent=ROOM_ID||'???';
 
-document.getElementById('displayRoomCode').textContent = ROOM_ID || '???';
-document.getElementById('wsCode').textContent = ROOM_ID || '???';
+// ═══ BOARD BUILD ═════════════════════════════════════════════
+function buildBoard(){
+  const container=document.getElementById('boardSquares');
+  const b3d=document.getElementById('board3d');
+  b3d.style.width=b3d.style.height=BOARD_PX+'px';
+  const bc=document.getElementById('boardCenter');
+  bc.style.left=bc.style.top=CORNER_PX+'px';
+  bc.style.width=bc.style.height=(BOARD_PX-CORNER_PX*2)+'px';
+  bc.style.fontSize=(BOARD_PX/20)+'px';
 
-// ═══ BOARD BUILD ══════════════════════════════════════════════
-function buildBoard() {
-  const container = document.getElementById('boardSquares');
-  const b3d = document.getElementById('board3d');
-  b3d.style.width = b3d.style.height = BOARD_PX + 'px';
-  const bc = document.getElementById('boardCenter');
-  bc.style.left = bc.style.top = CORNER_PX + 'px';
-  bc.style.width = bc.style.height = (BOARD_PX - CORNER_PX*2) + 'px';
-  bc.style.fontSize = (BOARD_PX/20) + 'px';
-
-  BD.forEach(sq => {
-    const layout = SL[sq.id];
-    if (!layout) return;
-    const [col, row, dir] = layout;
-    let left, top, w, h;
-    if (dir === 'corner') {
-      left = col===1 ? 0 : BOARD_PX-CORNER_PX;
-      top  = row===1 ? 0 : BOARD_PX-CORNER_PX;
-      w = h = CORNER_PX;
-    } else if (dir==='south'||dir==='north') {
-      left = CORNER_PX + (col-2)*INNER_PX;
-      top  = dir==='south' ? BOARD_PX-CORNER_PX : 0;
-      w = INNER_PX; h = CORNER_PX;
+  BD.forEach(sq=>{
+    const layout=SL[sq.id]; if(!layout) return;
+    const [col,row,dir]=layout;
+    let left,top,w,h;
+    if(dir==='corner'){
+      left=col===1?0:BOARD_PX-CORNER_PX;
+      top=row===1?0:BOARD_PX-CORNER_PX;
+      w=h=CORNER_PX;
+    } else if(dir==='south'||dir==='north'){
+      left=CORNER_PX+(col-2)*INNER_PX;
+      top=dir==='south'?BOARD_PX-CORNER_PX:0;
+      w=INNER_PX; h=CORNER_PX;
     } else {
-      left = dir==='east' ? BOARD_PX-CORNER_PX : 0;
-      top  = CORNER_PX + (row-2)*INNER_PX;
-      w = CORNER_PX; h = INNER_PX;
+      left=dir==='east'?BOARD_PX-CORNER_PX:0;
+      top=CORNER_PX+(row-2)*INNER_PX;
+      w=CORNER_PX; h=INNER_PX;
     }
-    const el = document.createElement('div');
-    el.className = `sq ${dir}`;
-    el.id = `sq-${sq.id}`;
-    el.style.cssText = `left:${left}px;top:${top}px;width:${w}px;height:${h}px;`;
+    const el=document.createElement('div');
+    el.className=`sq ${dir}`;
+    el.id=`sq-${sq.id}`;
+    el.dataset.id=sq.id;
+    el.style.cssText=`left:${left}px;top:${top}px;width:${w}px;height:${h}px;`;
 
-    if (dir === 'corner') {
-      const icons  = {0:'🏦',10:'⛓️',20:'🅿️',30:'👮'};
-      const labels = {0:'GO',10:'JAIL',20:'FREE\nPARKING',30:'GO TO\nJAIL'};
-      el.innerHTML = `<div class="corner-icon">${icons[sq.id]||''}</div><div class="corner-label">${(labels[sq.id]||sq.name).replace('\n','<br>')}</div>`;
+    if(dir==='corner'){
+      const icons={0:'🏦',10:'⛓️',20:'🅿️',30:'👮'};
+      const labels={0:'GO',10:'JAIL',20:'FREE\nPARKING',30:'GO TO\nJAIL'};
+      el.innerHTML=`<div class="corner-icon">${icons[sq.id]||''}</div><div class="corner-label">${(labels[sq.id]||sq.name).replace('\n','<br>')}</div>`;
     } else {
-      if (sq.group && GC[sq.group]) {
-        const band = document.createElement('div');
-        band.className='color-band'; band.style.color=GC[sq.group]; el.appendChild(band);
+      if(sq.group&&GC[sq.group]){
+        const band=document.createElement('div');
+        band.className='color-band'; band.style.background=GC[sq.group]; el.appendChild(band);
       }
-      const hr = document.createElement('div');
-      hr.className='house-row'; hr.id=`hr-${sq.id}`; el.appendChild(hr);
-      const inner = document.createElement('div');
-      inner.className='sq-inner';
-      inner.innerHTML = `<div class="sq-name">${sq.name}</div>${sq.price?`<div class="sq-price">$${sq.price}</div>`:''}`;
+      const hr=document.createElement('div'); hr.className='house-row'; hr.id=`hr-${sq.id}`; el.appendChild(hr);
+      const inner=document.createElement('div'); inner.className='sq-inner';
+      inner.innerHTML=`<div class="sq-name">${sq.name}</div>${sq.price?`<div class="sq-price">$${sq.price}`:''}`;
       el.appendChild(inner);
-      const ring = document.createElement('div');
-      ring.className='owner-ring'; ring.id=`ring-${sq.id}`; el.appendChild(ring);
+      const ring=document.createElement('div'); ring.className='owner-ring'; ring.id=`ring-${sq.id}`; el.appendChild(ring);
     }
-    el.addEventListener('click', ()=>onSquareClick(sq.id));
+    el.addEventListener('click',()=>onSquareClick(sq.id));
     container.appendChild(el);
   });
 }
 
-// ═══ 3D ROTATION ══════════════════════════════════════════════
-const VP = document.getElementById('boardViewport');
-const SC = document.getElementById('boardScene');
-const TILT = 52;
-function applyRot() { SC.style.transform = `translate(-50%,-50%) rotateX(${TILT}deg) rotateZ(${rotZ}deg)`; }
-VP.addEventListener('mousedown', e => { if(e.button===2){isDragging=true;dragStartX=e.clientX;dragStartZ=rotZ;e.preventDefault();} });
-VP.addEventListener('mousemove', e => { if(isDragging){rotZ=dragStartZ+(e.clientX-dragStartX)*.4;applyRot();} });
-VP.addEventListener('mouseup',   e => { if(e.button===2)isDragging=false; });
-VP.addEventListener('mouseleave',  () => isDragging=false);
-VP.addEventListener('contextmenu', e => e.preventDefault());
-VP.addEventListener('touchstart', e => { touchStartX=e.touches[0].clientX; touchStartZ=rotZ; },{passive:true});
-VP.addEventListener('touchmove',  e => { rotZ=touchStartZ+(e.touches[0].clientX-touchStartX)*.5; applyRot(); },{passive:true});
+// ═══ 3D ROTATION + ZOOM ══════════════════════════════════════
+const VP=document.getElementById('boardViewport');
+const SC=document.getElementById('boardScene');
+const TILT=52;
 
-// ═══ SOCKET ═══════════════════════════════════════════════════
-socket = io();
-socket.on('connect', () => { myPlayerId=socket.id; socket.emit('join-room',{roomId:ROOM_ID,playerName:MY_NAME}); });
-socket.on('joined-room', ({player}) => { myPlayerId=player.id; });
-socket.on('room-update', room => renderWaiting(room.players));
-socket.on('game-started', () => {
+function applyTransform(){
+  SC.style.transform=`translate(-50%,-50%) rotateX(${TILT}deg) rotateZ(${rotZ}deg) scale(${zoom})`;
+}
+
+// Right-click drag to rotate
+VP.addEventListener('mousedown',e=>{
+  if(e.button===2){isDragging=true;dragStartX=e.clientX;dragStartZ=rotZ;e.preventDefault();}
+});
+VP.addEventListener('mousemove',e=>{
+  if(isDragging){rotZ=dragStartZ+(e.clientX-dragStartX)*0.4;applyTransform();}
+});
+VP.addEventListener('mouseup',e=>{if(e.button===2)isDragging=false;});
+VP.addEventListener('mouseleave',()=>isDragging=false);
+VP.addEventListener('contextmenu',e=>e.preventDefault());
+
+// Scroll to zoom
+VP.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const delta=e.deltaY>0?-0.08:0.08;
+  zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,zoom+delta));
+  applyTransform();
+},{passive:false});
+
+// Touch: single finger = rotate, two-finger = pinch zoom
+VP.addEventListener('touchstart',e=>{
+  if(e.touches.length===1){
+    touchStartX=e.touches[0].clientX; touchStartZ=rotZ; lastPinchDist=null;
+  } else if(e.touches.length===2){
+    lastPinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+  }
+},{passive:true});
+VP.addEventListener('touchmove',e=>{
+  if(e.touches.length===1&&lastPinchDist===null){
+    rotZ=touchStartZ+(e.touches[0].clientX-touchStartX)*0.5; applyTransform();
+  } else if(e.touches.length===2){
+    const dist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    if(lastPinchDist){
+      zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,zoom*(dist/lastPinchDist)));
+      applyTransform();
+    }
+    lastPinchDist=dist;
+  }
+},{passive:true});
+VP.addEventListener('touchend',()=>{lastPinchDist=null;});
+
+// ═══ SOCKET ══════════════════════════════════════════════════
+socket=io();
+socket.on('connect',()=>{myPlayerId=socket.id;socket.emit('join-room',{roomId:ROOM_ID,playerName:MY_NAME});});
+socket.on('joined-room',({player})=>{myPlayerId=player.id;});
+socket.on('room-update',room=>renderWaiting(room.players));
+socket.on('game-started',()=>{
   document.getElementById('waitingScreen').style.display='none';
   document.getElementById('gameWrap').style.display='flex';
   buildBoard(); startTimer();
 });
-socket.on('game-state', state => {
+socket.on('game-state',state=>{
   gameState=state;
   renderPlayers(state); updateBoard(state);
   renderMyProps(state); renderOwnership(state); updateActions(state);
-  document.getElementById('fpPool').textContent = state.freeParkingPool>0?`Free Parking: $${state.freeParkingPool}`:'';
+  document.getElementById('fpPool').textContent=state.freeParkingPool>0?`Free Parking: $${state.freeParkingPool}`:'';
 });
-socket.on('game-event', ev => handleEvent(ev));
-socket.on('trade-offer', offer => showIncomingTrade(offer));
-socket.on('trade-result', res => toast(res.accepted?'🤝 Trade accepted!':'❌ Trade declined', res.accepted?'t-trade':'t-rent', 'Trade'));
-socket.on('game-over', ({winner}) => showGameOver(winner));
-socket.on('player-left', ({playerName}) => toast(`${playerName} left`,'','Player Left'));
-socket.on('error', ({message}) => toast(message,'t-rent','Error'));
+socket.on('game-event',ev=>handleEvent(ev));
+socket.on('trade-offer',offer=>showIncomingTrade(offer));
+socket.on('trade-result',res=>{
+  toast(res.accepted?'🤝 Trade accepted!':'❌ Trade declined',res.accepted?'t-trade':'t-rent','Trade');
+  setTradePause(false);
+});
+socket.on('game-over',({winner})=>showGameOver(winner));
+socket.on('player-left',({playerName})=>toast(`${playerName} left`,'','Player Left'));
+socket.on('error',({message})=>toast(message,'t-rent','Error'));
 
-// ═══ TIMER ════════════════════════════════════════════════════
-function startTimer() {
+// ═══ TRADE PAUSE ═════════════════════════════════════════════
+function setTradePause(on){
+  tradePending=on;
+  document.getElementById('tradePauseBanner').classList.toggle('show',on);
+  const pill=document.getElementById('timerPill');
+  if(on){pill.classList.add('paused');timerPaused=true;}
+  else{pill.classList.remove('paused');timerPaused=false;}
+}
+
+// ═══ TIMER ═══════════════════════════════════════════════════
+function startTimer(){
   timerSecs=90; clearInterval(timerInterval);
-  timerInterval = setInterval(()=>{
+  timerInterval=setInterval(()=>{
+    if(timerPaused) return;
     timerSecs--;
     const p=document.getElementById('timerPill');
     p.textContent=`${Math.floor(timerSecs/60)}:${(timerSecs%60).toString().padStart(2,'0')}`;
-    p.classList.toggle('urgent',timerSecs<=20);
-    if(timerSecs<=0) clearInterval(timerInterval);
+    p.classList.toggle('urgent',timerSecs<=20&&!timerPaused);
+    if(timerSecs<=0){
+      clearInterval(timerInterval);
+      autoTakeTurn();
+    }
   },1000);
 }
-function resetTimer(){timerSecs=90;}
+function resetTimer(){timerSecs=90; document.getElementById('timerPill').classList.remove('urgent');}
 
-// ═══ RENDER ═══════════════════════════════════════════════════
-function renderWaiting(players) {
-  document.getElementById('wsPlayers').innerHTML = players.map((p,i)=>`
+function autoTakeTurn(){
+  if(!gameState) return;
+  const isMy=gameState.players[gameState.currentPlayerIndex]?.id===myPlayerId;
+  if(!isMy) return;
+  const phase=gameState.phase;
+  if(phase==='roll'){
+    addLog('⏱ Time expired — auto-rolling!','hi');
+    doAction('roll');
+  } else if(phase==='action'){
+    doAction('end-turn');
+  }
+  // buy is handled server-side after roll; the can-buy event fires and we auto-buy below
+}
+
+// ═══ RENDER ══════════════════════════════════════════════════
+function renderWaiting(players){
+  document.getElementById('wsPlayers').innerHTML=players.map((p,i)=>`
     <div class="ws-player"><div class="ws-token">${TOKENS[i]}</div><div class="ws-pname">${p.name}${p.isBot?' 🤖':''}</div>
     <div class="${p.ready?'ws-ready':'ws-waiting'}">${p.ready?'✓ Ready':'⋯'}</div></div>`).join('');
 }
 
-function netWorth(p, state) {
-  let w = p.money;
-  p.properties.forEach(pos => {
-    const sq = BD.find(s=>s.id===pos);
-    if (!sq) return;
-    w += state.mortgaged[pos] ? (sq.m||Math.floor((sq.price||0)/2)) : (sq.price||0);
-    w += (state.houses[pos]||0) * ((sq.hc||0)/2);
+function netWorth(p,state){
+  let w=p.money;
+  p.properties.forEach(pos=>{
+    const sq=BD.find(s=>s.id===pos); if(!sq) return;
+    w+=state.mortgaged[pos]?(sq.m||Math.floor((sq.price||0)/2)):(sq.price||0);
+    w+=(state.houses[pos]||0)*((sq.hc||0)/2);
   });
   return w;
 }
 
-function renderPlayers(state) {
-  document.getElementById('playersList').innerHTML = state.players.map((p,i) => {
+function renderPlayers(state){
+  document.getElementById('playersList').innerHTML=state.players.map((p,i)=>{
     const isActive=i===state.currentPlayerIndex, isMe=p.id===myPlayerId;
     const nw=netWorth(p,state);
     return `<div class="player-card ${isActive?'active':''} ${p.isBankrupt?'bankrupt':''}">
@@ -721,33 +840,33 @@ function renderPlayers(state) {
   }).join('');
 }
 
-function updateBoard(state) {
-  BD.forEach(sq => {
-    const ring = document.getElementById(`ring-${sq.id}`);
-    if (ring) {
-      const oi = state.players.findIndex(p=>p.id===state.ownership[sq.id]);
-      ring.style.background = oi>=0 ? PC[oi] : 'transparent';
+function updateBoard(state){
+  BD.forEach(sq=>{
+    const ring=document.getElementById(`ring-${sq.id}`);
+    if(ring){
+      const oi=state.players.findIndex(p=>p.id===state.ownership[sq.id]);
+      ring.style.background=oi>=0?PC[oi]:'transparent';
     }
-    const sqEl = document.getElementById(`sq-${sq.id}`);
-    if (sqEl) {
-      let mo = sqEl.querySelector('.mortgage-overlay');
-      if (state.mortgaged[sq.id]) { if(!mo){mo=document.createElement('div');mo.className='mortgage-overlay';mo.textContent='M';sqEl.appendChild(mo);} }
-      else if (mo) mo.remove();
+    const sqEl=document.getElementById(`sq-${sq.id}`);
+    if(sqEl){
+      let mo=sqEl.querySelector('.mortgage-overlay');
+      if(state.mortgaged[sq.id]){if(!mo){mo=document.createElement('div');mo.className='mortgage-overlay';mo.textContent='M';sqEl.appendChild(mo);}}
+      else if(mo) mo.remove();
     }
-    const hr = document.getElementById(`hr-${sq.id}`);
-    if (hr) {
+    const hr=document.getElementById(`hr-${sq.id}`);
+    if(hr){
       const h=state.houses[sq.id]||0; hr.innerHTML='';
-      if (h===5){const d=document.createElement('div');d.className='h-icon hotel';hr.appendChild(d);}
+      if(h===5){const d=document.createElement('div');d.className='h-icon hotel';hr.appendChild(d);}
       else for(let i=0;i<h;i++){const d=document.createElement('div');d.className='h-icon';hr.appendChild(d);}
     }
   });
   updateTokens(state);
 }
 
-function updateTokens(state) {
+function updateTokens(state){
   const container=document.getElementById('boardTokens'); container.innerHTML='';
   const byPos={};
-  state.players.forEach(p=>{ if(!p.isBankrupt){if(!byPos[p.position])byPos[p.position]=[];byPos[p.position].push(p);} });
+  state.players.forEach(p=>{if(!p.isBankrupt){if(!byPos[p.position])byPos[p.position]=[];byPos[p.position].push(p);}});
   Object.entries(byPos).forEach(([pos,players])=>{
     const layout=SL[pos]; if(!layout) return;
     const [col,row,dir]=layout;
@@ -757,14 +876,14 @@ function updateTokens(state) {
     else{bx=dir==='east'?BOARD_PX-CORNER_PX:0;by=CORNER_PX+(row-2)*INNER_PX;bw=CORNER_PX;bh=INNER_PX;}
     players.forEach((player,i)=>{
       const t=document.createElement('div'); t.className='token-3d'; t.textContent=player.token; t.title=player.name;
-      const ox=(i%2)*(bw*.4),oy=Math.floor(i/2)*(bh*.4);
-      t.style.left=(bx+bw*.1+ox)+'px'; t.style.top=(by+bh*.1+oy)+'px';
+      const ox=(i%2)*(bw*.38),oy=Math.floor(i/2)*(bh*.38);
+      t.style.left=(bx+bw*.12+ox)+'px'; t.style.top=(by+bh*.12+oy)+'px';
       container.appendChild(t);
     });
   });
 }
 
-function renderMyProps(state) {
+function renderMyProps(state){
   const me=state.players.find(p=>p.id===myPlayerId); if(!me) return;
   const c=document.getElementById('myProps');
   if(!me.properties.length){c.innerHTML='<div style="font-size:.52rem;color:var(--text-dim)">None yet</div>';return;}
@@ -780,7 +899,7 @@ function renderMyProps(state) {
   }).join('');
 }
 
-function renderOwnership(state) {
+function renderOwnership(state){
   const lines=[]; BD.forEach(sq=>{
     const oi=state.players.findIndex(p=>p.id===state.ownership[sq.id]);
     if(oi>=0) lines.push(`<div style="color:${PC[oi]}">${sq.name} → ${state.players[oi]?.name||'?'}</div>`);
@@ -788,7 +907,7 @@ function renderOwnership(state) {
   document.getElementById('ownershipPanel').innerHTML=lines.join('')||'<div style="color:var(--text-dim)">Nothing owned yet</div>';
 }
 
-function updateActions(state) {
+function updateActions(state){
   const me=state.players.find(p=>p.id===myPlayerId); if(!me) return;
   const isMy=state.players[state.currentPlayerIndex]?.id===myPlayerId;
   const phase=state.phase;
@@ -819,10 +938,12 @@ function updateActions(state) {
     const isD=state.dice[0]===state.dice[1];
     g('diceInfo').innerHTML=`Total: <strong>${state.dice[0]+state.dice[1]}</strong>${isD?' <span class="doubles-badge">Doubles!</span>':''}`;
   }
+  // Reset timer when it's our turn
+  if(isMy) resetTimer();
 }
 
-// ═══ DICE ANIMATION ═══════════════════════════════════════════
-function animateDice(d1,d2) {
+// ═══ DICE ANIMATION ══════════════════════════════════════════
+function animateDice(d1,d2){
   ['die1','die2'].forEach((id,i)=>{
     const val=i===0?d1:d2, rot=DR[val]||{rx:0,ry:0};
     const el=document.getElementById(id);
@@ -832,21 +953,37 @@ function animateDice(d1,d2) {
   });
 }
 
-// ═══ EVENTS ═══════════════════════════════════════════════════
-function handleEvent(ev) {
+// ═══ EVENTS ══════════════════════════════════════════════════
+function handleEvent(ev){
   if(!ev) return;
   if(ev.type==='multi-event'&&ev.events){
     if(ev.dice) animateDice(ev.dice[0],ev.dice[1]);
-    ev.events.forEach(processSingleEvent); resetTimer(); return;
+    ev.events.forEach(processSingleEvent);
+    return;
   }
   processSingleEvent(ev);
 }
 
-function processSingleEvent(ev) {
+// After an auto-roll, if we land on a buyable property and can afford it, auto-buy
+let pendingAutoBuy=false;
+
+function processSingleEvent(ev){
   if(!ev) return;
   switch(ev.type){
     case 'can-buy':
-      if(gameState?.players[gameState.currentPlayerIndex]?.id===myPlayerId) showBuyModal(ev); break;
+      if(gameState?.players[gameState.currentPlayerIndex]?.id===myPlayerId){
+        if(pendingAutoBuy){
+          // Auto-buy: timer expired, just buy if we can afford it
+          const sq=BD.find(s=>s.name===ev.square);
+          const me=gameState.players.find(p=>p.id===myPlayerId);
+          if(sq&&me&&me.money>=ev.price){doAction('buy');}
+          else{doAction('decline-buy');}
+          pendingAutoBuy=false;
+        } else {
+          showBuyModal(ev);
+        }
+      }
+      break;
     case 'card': showCard(ev); break;
     case 'go-to-jail': toast(`🔒 ${ev.player} sent to Jail!`,'t-jail','Jail!'); addLog(`🔒 ${ev.player} went to Jail!`,'hi'); break;
     case 'rent': toast(`💸 ${ev.payer} paid $${ev.amount} to ${ev.owner}`,'t-rent','Rent'); addLog(`💰 ${ev.payer} → $${ev.amount} → ${ev.owner} (${ev.square})`,'ev'); break;
@@ -861,17 +998,33 @@ function processSingleEvent(ev) {
     case 'doubles-again': toast(`🎲 Doubles! Roll again.`,'','Doubles'); addLog(`🎲 ${ev.player} rolled doubles!`,'hi'); break;
     case 'mortgaged': addLog(`🔒 ${ev.player} mortgaged ${ev.square} $${ev.amount}`,'ev'); break;
     case 'unmortgaged': addLog(`🔓 ${ev.player} unmortgaged ${ev.square}`,'ev'); break;
+    case 'trade-complete': toast(`🤝 ${ev.from} ↔ ${ev.to} trade done`,'t-trade','Trade'); addLog(`🤝 ${ev.from} ↔ ${ev.to} completed trade`,'hi'); break;
   }
 }
 
-// ═══ PROPERTY POPUP ═══════════════════════════════════════════
-function onSquareClick(sqId) {
+// Override autoTakeTurn to set pendingAutoBuy flag
+function autoTakeTurn(){
+  if(!gameState) return;
+  const isMy=gameState.players[gameState.currentPlayerIndex]?.id===myPlayerId;
+  if(!isMy) return;
+  const phase=gameState.phase;
+  if(phase==='roll'){
+    addLog('⏱ Time expired — auto-rolling!','hi');
+    pendingAutoBuy=true; // if we land on unowned property, auto-buy if affordable
+    doAction('roll');
+  } else if(phase==='action'){
+    doAction('end-turn');
+  }
+}
+
+// ═══ PROPERTY POPUP ══════════════════════════════════════════
+function onSquareClick(sqId){
   const sq=BD.find(s=>s.id===sqId); if(!sq) return;
   if(gameState){const me=gameState.players.find(p=>p.id===myPlayerId);if(me&&me.properties.includes(sqId))selectProp(sqId);}
   showPropPopup(sqId);
 }
 
-function showPropPopup(sqId) {
+function showPropPopup(sqId){
   const sq=BD.find(s=>s.id===sqId);
   if(!sq||['go','jail','gotojail','freeparking'].includes(sq.type)) return;
   const color=sq.group?GC[sq.group]:(sq.type==='railroad'?'#888':'#5a5a5a');
@@ -885,9 +1038,9 @@ function showPropPopup(sqId) {
     const oi=gameState.players.findIndex(p=>p.id===gameState.ownership[sqId]);
     const owner=oi>=0?gameState.players[oi]:null;
     html+=owner
-      ?`<div class="pp-owner" style="border-color:${PC[oi]}"><div style="width:8px;height:8px;border-radius:50%;background:${PC[oi]}"></div>Owned by <strong style="color:${PC[oi]}">${owner.name}</strong></div>`
+      ?`<div class="pp-owner" style="border-color:${PC[oi]}"><div style="width:7px;height:7px;border-radius:50%;background:${PC[oi]}"></div>Owned by <strong style="color:${PC[oi]}">${owner.name}</strong></div>`
       :`<div class="pp-owner" style="color:var(--text-dim)">Unowned — for sale</div>`;
-    if(gameState.mortgaged[sqId]) html+=`<div style="color:#e74c3c;font-size:.58rem;margin-top:.35rem">⚠️ Mortgaged</div>`;
+    if(gameState.mortgaged[sqId]) html+=`<div style="color:#e74c3c;font-size:.55rem;margin-top:.3rem">⚠️ Mortgaged</div>`;
   }
   if(sq.price){
     html+=`<div class="pp-sec">Financials</div>`;
@@ -896,55 +1049,53 @@ function showPropPopup(sqId) {
   }
   if(sq.type==='property'&&sq.rent){
     html+=`<div class="pp-sec">Rent Schedule</div>`;
-    const labels=['No Monopoly','Color Monopoly','1 House','2 Houses','3 Houses','4 Houses','Hotel'];
-    sq.rent.forEach((r,i)=>{ html+=`<div class="pp-row"><span>${labels[i]||i}</span><span>$${r}</span></div>`; });
+    ['No Monopoly','Color Monopoly','1 House','2 Houses','3 Houses','4 Houses','Hotel'].forEach((lbl,i)=>{
+      html+=`<div class="pp-row"><span>${lbl}</span><span>$${sq.rent[i]}</span></div>`;
+    });
     html+=`<div class="pp-row"><span>House/Hotel Cost</span><span>$${sq.hc} each</span></div>`;
   }
   if(sq.type==='railroad'){
-    html+=`<div class="pp-sec">Rent by Railroads Owned</div>`;
-    [25,50,100,200].forEach((r,i)=>{ html+=`<div class="pp-row"><span>${i+1} Railroad${i>0?'s':''}</span><span>$${r}</span></div>`; });
+    html+=`<div class="pp-sec">Rent by RRs Owned</div>`;
+    [25,50,100,200].forEach((r,i)=>{html+=`<div class="pp-row"><span>${i+1} RR${i>0?'s':''}</span><span>$${r}</span></div>`;});
   }
   if(sq.type==='utility'){
     html+=`<div class="pp-sec">Rent</div>`;
-    html+=`<div class="pp-row"><span>1 Utility</span><span>4× dice roll</span></div>`;
-    html+=`<div class="pp-row"><span>Both Utilities</span><span>10× dice roll</span></div>`;
+    html+=`<div class="pp-row"><span>1 Utility</span><span>4× dice</span></div>`;
+    html+=`<div class="pp-row"><span>Both</span><span>10× dice</span></div>`;
   }
-  if(sq.type==='tax') html+=`<div class="pp-row" style="margin-top:.5rem"><span>Tax Amount</span><span>$${sq.amount}</span></div>`;
+  if(sq.type==='tax') html+=`<div class="pp-row" style="margin-top:.4rem"><span>Tax</span><span>$${sq.amount}</span></div>`;
   document.getElementById('ppContent').innerHTML=html;
-  const popup=document.getElementById('propPopup');
-  popup.style.top='8%'; popup.style.left='50%'; popup.style.transform='translateX(-50%)';
-  popup.classList.add('show');
+  document.getElementById('propPopup').classList.add('show');
 }
-
-function closePropPopup(){ document.getElementById('propPopup').classList.remove('show'); }
-document.addEventListener('click', e => {
+function closePropPopup(){document.getElementById('propPopup').classList.remove('show');}
+document.addEventListener('click',e=>{
   const p=document.getElementById('propPopup');
   if(p.classList.contains('show')&&!p.contains(e.target)&&!e.target.closest('.sq')) closePropPopup();
 });
 
-// ═══ BUY MODAL ════════════════════════════════════════════════
-function showBuyModal(ev) {
-  const sq=BD.find(s=>s.name===ev.square)||BD.find(s=>s.id===gameState?.players.find(p=>p.id===myPlayerId)?.position);
+// ═══ BUY MODAL ═══════════════════════════════════════════════
+function showBuyModal(ev){
+  const sq=BD.find(s=>s.name===ev.square);
   document.getElementById('buyTitle').textContent=ev.square;
   document.getElementById('buyPriceSpan').textContent=ev.price;
   let html=`<div class="modal-row"><span>Price</span><span style="color:var(--gold);font-weight:700">$${ev.price}</span></div>`;
   if(sq?.type==='property'&&sq.rent){
     html+=`<div class="modal-row"><span>Base Rent</span><span>$${sq.rent[0]}</span></div>`;
-    html+=`<div class="modal-row"><span>With Monopoly</span><span>$${sq.rent[1]}</span></div>`;
+    html+=`<div class="modal-row"><span>Monopoly Rent</span><span>$${sq.rent[1]}</span></div>`;
     html+=`<div class="modal-row"><span>Hotel Rent</span><span>$${sq.rent[5]}</span></div>`;
   } else if(sq?.type==='railroad'){
-    html+=`<div class="modal-row"><span>Rent (1 RR)</span><span>$25</span></div>`;
-    html+=`<div class="modal-row"><span>Rent (4 RR)</span><span>$200</span></div>`;
+    html+=`<div class="modal-row"><span>1 RR Rent</span><span>$25</span></div>`;
+    html+=`<div class="modal-row"><span>4 RR Rent</span><span>$200</span></div>`;
   }
   if(gameState){const me=gameState.players.find(p=>p.id===myPlayerId);html+=`<div class="modal-row"><span>Your Balance</span><span>$${me?.money?.toLocaleString()||'?'}</span></div>`;}
   document.getElementById('buyDetails').innerHTML=html;
   openModal('buyModal');
 }
-function doBuy()    { closeModal('buyModal'); doAction('buy'); }
-function doDecline(){ closeModal('buyModal'); doAction('decline-buy'); }
+function doBuy(){closeModal('buyModal');doAction('buy');}
+function doDecline(){closeModal('buyModal');doAction('decline-buy');}
 
-// ═══ TRADE ════════════════════════════════════════════════════
-function openTradeModal() {
+// ═══ TRADE DRAWER ════════════════════════════════════════════
+function openTradeDrawer(){
   if(!gameState) return;
   const others=gameState.players.filter(p=>p.id!==myPlayerId&&!p.isBankrupt);
   if(!others.length){toast('No players to trade with','','Trade');return;}
@@ -956,19 +1107,20 @@ function openTradeModal() {
   document.getElementById('offerMoney').value='';
   document.getElementById('requestMoney').value='';
   updateTradeSummary();
-  openModal('tradeModal');
+  document.getElementById('tradeDrawer').classList.add('open');
 }
+function closeTradeDrawer(){document.getElementById('tradeDrawer').classList.remove('open');}
 
-function refreshTradeLists() {
+function refreshTradeLists(){
   if(!gameState) return;
   const me=gameState.players.find(p=>p.id===myPlayerId);
   const targetId=document.getElementById('tradeTarget').value;
   const target=gameState.players.find(p=>p.id===targetId);
   const renderList=(props,selSet,cId)=>{
     const c=document.getElementById(cId);
-    if(!props?.length){c.innerHTML='<div style="font-size:.52rem;color:var(--text-dim);padding:.3rem">No properties</div>';return;}
+    if(!props?.length){c.innerHTML='<div style="font-size:.5rem;color:var(--text-dim);padding:.25rem">No properties</div>';return;}
     c.innerHTML=props.map(pos=>{
-      const sq=BD.find(s=>s.id===pos);const color=sq?.group?GC[sq.group]:'#888';
+      const sq=BD.find(s=>s.id===pos); const color=sq?.group?GC[sq.group]:'#888';
       return `<div class="trade-prop ${selSet.has(pos)?'sel':''}" onclick="toggleTradeProp(${pos},'${cId}')">
         <div class="prop-dot" style="background:${color}"></div><span>${sq?.name||pos}</span></div>`;
     }).join('');
@@ -980,25 +1132,25 @@ function refreshTradeLists() {
   updateTradeSummary();
 }
 
-function toggleTradeProp(pos,cId) {
+function toggleTradeProp(pos,cId){
   const s=cId==='offerProps'?selectedOfferProps:selectedRequestProps;
   s.has(pos)?s.delete(pos):s.add(pos); refreshTradeLists();
 }
 
-function updateTradeSummary() {
+function updateTradeSummary(){
   const om=parseInt(document.getElementById('offerMoney')?.value)||0;
   const rm=parseInt(document.getElementById('requestMoney')?.value)||0;
   const op=[...selectedOfferProps].map(p=>BD.find(s=>s.id===p)?.name||p);
   const rp=[...selectedRequestProps].map(p=>BD.find(s=>s.id===p)?.name||p);
   const lines=[];
-  if(op.length) lines.push(`You give: ${op.join(', ')}`);
-  if(om>0) lines.push(`You give: $${om}`);
-  if(rp.length) lines.push(`You get: ${rp.join(', ')}`);
-  if(rm>0) lines.push(`You get: $${rm}`);
+  if(op.length) lines.push(`Give: ${op.join(', ')}`);
+  if(om>0) lines.push(`Give: $${om}`);
+  if(rp.length) lines.push(`Get: ${rp.join(', ')}`);
+  if(rm>0) lines.push(`Get: $${rm}`);
   document.getElementById('tradeSummary').textContent=lines.join(' · ')||'Nothing selected.';
 }
 
-function sendTrade() {
+function sendTrade(){
   if(!gameState) return;
   const targetId=document.getElementById('tradeTarget').value;
   const om=parseInt(document.getElementById('offerMoney').value)||0;
@@ -1006,10 +1158,10 @@ function sendTrade() {
   if(!selectedOfferProps.size&&!selectedRequestProps.size&&!om&&!rm){toast('Select something to trade','','Trade');return;}
   const trade={from:myPlayerId,to:targetId,offerProps:[...selectedOfferProps],requestProps:[...selectedRequestProps],offerMoney:om,requestMoney:rm,id:Date.now().toString()};
   socket.emit('trade-propose',{roomId:ROOM_ID,trade});
-  closeModal('tradeModal'); toast('Trade offer sent!','t-trade','Trade Sent');
+  closeTradeDrawer(); toast('Trade offer sent!','t-trade','Trade Sent');
 }
 
-function showIncomingTrade(offer) {
+function showIncomingTrade(offer){
   if(!gameState) return;
   pendingTradeId=offer.id;
   const from=gameState.players.find(p=>p.id===offer.from);
@@ -1021,40 +1173,42 @@ function showIncomingTrade(offer) {
   };
   renderItems(offer.offerProps,offer.offerMoney,'incomingOfferList');
   renderItems(offer.requestProps,offer.requestMoney,'incomingRequestList');
-  openModal('incomingTradeModal');
+  document.getElementById('incomingDrawer').classList.add('open');
+  setTradePause(true);
   toast(`🤝 Trade offer from ${from?.name}!`,'t-trade','Trade Offer');
 }
 
-function respondTrade(accept) {
+function respondTrade(accept){
   socket.emit('trade-respond',{roomId:ROOM_ID,tradeId:pendingTradeId,accept});
-  closeModal('incomingTradeModal');
+  document.getElementById('incomingDrawer').classList.remove('open');
+  setTradePause(false);
 }
 
-// ═══ PROPERTY MANAGEMENT ══════════════════════════════════════
-function selectProp(sqId) {
+// ═══ PROPERTY MANAGEMENT ═════════════════════════════════════
+function selectProp(sqId){
   selectedSqId=sqId; const sq=BD.find(s=>s.id===sqId); if(!sq||!gameState) return;
   const m=gameState.mortgaged[sqId];
   document.getElementById('managePanel').style.display='block';
   document.getElementById('managePropName').textContent=sq.name;
-  document.getElementById('mortgageBtn').style.display  =m?'none':'block';
+  document.getElementById('mortgageBtn').style.display=m?'none':'block';
   document.getElementById('unmortgageBtn').style.display=m?'block':'none';
   renderMyProps(gameState);
 }
-function buildHouse()    {if(selectedSqId!==null)doAction('build-house',{squareId:selectedSqId});}
-function sellHouse()     {if(selectedSqId!==null)doAction('sell-house', {squareId:selectedSqId});}
-function mortgageProp()  {if(selectedSqId!==null)doAction('mortgage',   {squareId:selectedSqId});}
-function unmortgageProp(){if(selectedSqId!==null)doAction('unmortgage', {squareId:selectedSqId});}
+function buildHouse(){if(selectedSqId!==null)doAction('build-house',{squareId:selectedSqId});}
+function sellHouse(){if(selectedSqId!==null)doAction('sell-house',{squareId:selectedSqId});}
+function mortgageProp(){if(selectedSqId!==null)doAction('mortgage',{squareId:selectedSqId});}
+function unmortgageProp(){if(selectedSqId!==null)doAction('unmortgage',{squareId:selectedSqId});}
 
-// ═══ BANKRUPTCY ═══════════════════════════════════════════════
-function openBankruptModal() {
+// ═══ BANKRUPTCY ══════════════════════════════════════════════
+function openBankruptModal(){
   if(!gameState) return;
   const me=gameState.players.find(p=>p.id===myPlayerId);
   document.getElementById('bankruptWarn').textContent=`You are $${Math.abs(me?.money||0)} in debt.`;
   openModal('bankruptModal');
 }
 
-// ═══ CARD FLASH ═══════════════════════════════════════════════
-function showCard(ev) {
+// ═══ CARD FLASH ══════════════════════════════════════════════
+function showCard(ev){
   const f=document.getElementById('cardFlash'), inner=document.getElementById('cardInner');
   document.getElementById('cardTypeLbl').textContent=ev.cardType==='chance'?'⚡ Chance':'🫂 Community Chest';
   document.getElementById('cardTypeLbl').className=`card-type-lbl ${ev.cardType}`;
@@ -1065,17 +1219,17 @@ function showCard(ev) {
 }
 function dismissCard(){document.getElementById('cardFlash').classList.remove('show');}
 
-// ═══ AUCTION ══════════════════════════════════════════════════
+// ═══ AUCTION ═════════════════════════════════════════════════
 function placeBid(){const a=parseInt(document.getElementById('bidAmt').value);if(!a||a<=0)return;doAction('auction-bid',{amount:a});document.getElementById('bidAmt').value='';}
 
-// ═══ GAME OVER ════════════════════════════════════════════════
-function showGameOver(winner) {
+// ═══ GAME OVER ═══════════════════════════════════════════════
+function showGameOver(winner){
   if(!gameState) return;
   document.getElementById('goWinner').textContent=winner?winner.name+' wins!':'Game Over';
   const sorted=[...gameState.players].sort((a,b)=>netWorth(b,gameState)-netWorth(a,gameState));
   const me=gameState.players.find(p=>p.id===myPlayerId)||sorted[0];
   document.getElementById('goStats').innerHTML=`
-    <div class="go-stat"><div class="go-stat-val">${gameState.turnCount}</div><div class="go-stat-lbl">Total Turns</div></div>
+    <div class="go-stat"><div class="go-stat-val">${gameState.turnCount||'—'}</div><div class="go-stat-lbl">Total Turns</div></div>
     <div class="go-stat"><div class="go-stat-val">${me.properties.length}</div><div class="go-stat-lbl">Your Properties</div></div>
     <div class="go-stat"><div class="go-stat-val">$${netWorth(me,gameState).toLocaleString()}</div><div class="go-stat-lbl">Your Net Worth</div></div>`;
   document.getElementById('goPlayers').innerHTML=sorted.map((p,i)=>`
@@ -1088,24 +1242,29 @@ function showGameOver(winner) {
   document.getElementById('gameoverScreen').classList.add('show');
 }
 
-// ═══ TOAST ════════════════════════════════════════════════════
-function toast(msg,cls='',title='') {
+// ═══ TOAST ═══════════════════════════════════════════════════
+function toast(msg,cls='',title=''){
   const c=document.getElementById('toastContainer');
   const el=document.createElement('div'); el.className=`toast ${cls}`;
   el.innerHTML=`${title?`<div class="toast-title">${title}</div>`:''}<div>${msg}</div>`;
   c.appendChild(el);
   requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('show')));
-  setTimeout(()=>{el.classList.add('hide');setTimeout(()=>el.remove(),400);},3200);
+  setTimeout(()=>{el.classList.add('hide');setTimeout(()=>el.remove(),400);},3500);
 }
 
-// ═══ UTILS ════════════════════════════════════════════════════
+// ═══ UTILS ═══════════════════════════════════════════════════
 function doAction(action,data={}){if(ROOM_ID)socket.emit('game-action',{roomId:ROOM_ID,action,data});}
 function sendReady(){socket.emit('player-ready',{roomId:ROOM_ID});document.getElementById('readyBtn').disabled=true;document.getElementById('readyBtn').textContent='✓ Ready!';}
-function addLog(msg,cls=''){const l=document.getElementById('gameLog');const el=document.createElement('div');el.className=`log-entry ${cls}`;el.textContent=msg;l.prepend(el);if(l.children.length>50)l.removeChild(l.lastChild);}
+function addLog(msg,cls=''){const l=document.getElementById('gameLog');const el=document.createElement('div');el.className=`log-entry ${cls}`;el.textContent=msg;l.prepend(el);if(l.children.length>60)l.removeChild(l.lastChild);}
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){['buyModal','tradeModal','incomingTradeModal','bankruptModal'].forEach(closeModal);closePropPopup();dismissCard();}
+  if(e.key==='Escape'){
+    ['buyModal','bankruptModal'].forEach(closeModal);
+    closeTradeDrawer();
+    document.getElementById('incomingDrawer').classList.remove('open');
+    closePropPopup(); dismissCard();
+  }
 });
 </script>
 </body>
