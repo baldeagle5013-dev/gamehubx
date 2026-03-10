@@ -116,6 +116,30 @@ io.on('connection', (socket) => {
     handleGameAction(room, roomId, socket.id, action, data);
   });
 
+  socket.on('trade-propose', ({ roomId, trade }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (!room.pendingTrades) room.pendingTrades = {};
+    room.pendingTrades[trade.id] = trade;
+    // Forward to target player only
+    io.to(trade.to).emit('trade-offer', trade);
+  });
+
+  socket.on('trade-respond', ({ roomId, tradeId, accept }) => {
+    const room = rooms[roomId];
+    if (!room || !room.gameInstance) return;
+    if (!room.pendingTrades || !room.pendingTrades[tradeId]) return;
+    const trade = room.pendingTrades[tradeId];
+    delete room.pendingTrades[tradeId];
+    if (accept) {
+      room.gameInstance.executeTrade(trade);
+      broadcastGameState(room, roomId);
+      io.to(roomId).emit('trade-result', { accepted: true, tradeId });
+    } else {
+      io.to(trade.from).emit('trade-result', { accepted: false, tradeId });
+    }
+  });
+
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId && rooms[roomId]) {
