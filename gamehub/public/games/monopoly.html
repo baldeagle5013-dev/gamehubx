@@ -204,7 +204,20 @@
     .trade-pause-banner{position:absolute;bottom:0;left:0;right:0;background:rgba(76,107,201,.15);border-top:1px solid rgba(76,107,201,.3);padding:.4rem;text-align:center;font-size:.58rem;color:#4c6bc9;letter-spacing:.1em;pointer-events:none;z-index:5;display:none;}
     .trade-pause-banner.show{display:block;}
 
-    /* BUY / BANKRUPT modals — small, non-blocking */
+    /* BUY DRAWER — slides in from left, board still fully visible */
+    .buy-drawer{position:fixed;top:48px;left:0;bottom:0;width:300px;background:var(--dark-2);border-right:1px solid rgba(201,168,76,.25);transform:translateX(-100%);transition:transform .3s cubic-bezier(.25,.46,.45,.94);z-index:400;display:flex;flex-direction:column;overflow:hidden;}
+    .buy-drawer.open{transform:translateX(0);}
+    .bd-header{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem;border-bottom:1px solid rgba(201,168,76,.12);flex-shrink:0;background:rgba(201,168,76,.04);}
+    .bd-title{font-family:'Cormorant Garamond',serif;font-size:1.5rem;color:var(--gold);}
+    .bd-sub{font-size:.46rem;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim);margin-top:.1rem;}
+    .bd-body{flex:1;overflow-y:auto;padding:1rem;}
+    .bd-color-bar{height:5px;margin:-1rem -1rem .9rem;}
+    .bd-row{display:flex;justify-content:space-between;align-items:center;font-size:.62rem;padding:.28rem 0;border-bottom:1px solid rgba(201,168,76,.05);}
+    .bd-row span:last-child{color:var(--gold);font-weight:700;}
+    .bd-hint{font-size:.52rem;color:var(--text-dim);line-height:1.7;margin-top:.9rem;padding:.6rem;background:var(--dark-4);border:1px solid rgba(201,168,76,.06);}
+    .bd-footer{padding:.9rem 1rem;border-top:1px solid rgba(201,168,76,.1);flex-shrink:0;display:flex;gap:.5rem;}
+
+    /* BANKRUPT MODAL — overlay since it's urgent */
     .modal-overlay{position:fixed;inset:0;z-index:600;background:rgba(6,6,8,.75);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;}
     .modal-overlay.open{opacity:1;pointer-events:all;}
     .modal-box{background:var(--dark-3);border:1px solid rgba(201,168,76,.2);padding:1.8rem;max-width:380px;width:90%;transform:translateY(12px);transition:transform .25s;max-height:88vh;overflow-y:auto;}
@@ -491,16 +504,22 @@
   </div>
 </div>
 
-<!-- BUY MODAL -->
-<div class="modal-overlay" id="buyModal">
-  <div class="modal-box">
-    <div class="modal-title" id="buyTitle">Property</div>
-    <div class="modal-sub">Available for purchase</div>
-    <div id="buyDetails"></div>
-    <div class="modal-actions">
-      <button class="action-btn" onclick="doBuy()">Buy — $<span id="buyPriceSpan"></span></button>
-      <button class="action-btn sec" onclick="doDecline()">Start Auction</button>
+<!-- BUY DRAWER — slides from left, board fully visible -->
+<div class="buy-drawer" id="buyDrawer">
+  <div class="bd-header">
+    <div>
+      <div class="bd-title" id="buyTitle">Property</div>
+      <div class="bd-sub">Available for purchase</div>
     </div>
+  </div>
+  <div class="bd-body">
+    <div class="bd-color-bar" id="buyColorBar"></div>
+    <div id="buyDetails"></div>
+    <div class="bd-hint">💡 You can click any square on the board to inspect it before deciding.</div>
+  </div>
+  <div class="bd-footer">
+    <button class="action-btn" style="margin:0" id="buyBtn" onclick="doBuy()">Buy — $<span id="buyPriceSpan"></span></button>
+    <button class="action-btn sec" style="margin:0" onclick="doDecline()">Auction</button>
   </div>
 </div>
 
@@ -597,9 +616,9 @@ const SL={
   6: [5,12,'south'],  7:[4,12,'south'],  8:[3,12,'south'],  9:[2,12,'south'],
   10:[1,12,'corner'],   // Jail — bottom-left
 
-  // Left col: 11 at bottom going up to 19 near top
-  11:[1,11,'west'], 12:[1,10,'west'], 13:[1,9,'west'], 14:[1,8,'west'], 15:[1,7,'west'],
-  16:[1,6,'west'],  17:[1,5,'west'],  18:[1,4,'west'], 19:[1,3,'west'],
+  // Left col: 11 just above BL corner going up to 19 just below TL corner (rows 10 down to 2)
+  11:[1,10,'west'], 12:[1,9,'west'], 13:[1,8,'west'], 14:[1,7,'west'], 15:[1,6,'west'],
+  16:[1,5,'west'],  17:[1,4,'west'],  18:[1,3,'west'], 19:[1,2,'west'],
 
   // Top row: Free Parking at top-left (col1,row1), squares go left-to-right (col 2 to 10), GoToJail at top-right (col11,row1)
   20:[1,1,'corner'],    // Free Parking — top-left
@@ -781,19 +800,41 @@ function setTradePause(on){
 // ═══ TIMER ═══════════════════════════════════════════════════
 function startTimer(){
   timerSecs=90; clearInterval(timerInterval);
+  const p=document.getElementById('timerPill');
+  p.classList.remove('urgent'); p.classList.remove('paused');
   timerInterval=setInterval(()=>{
     if(timerPaused) return;
     timerSecs--;
-    const p=document.getElementById('timerPill');
     p.textContent=`${Math.floor(timerSecs/60)}:${(timerSecs%60).toString().padStart(2,'0')}`;
     p.classList.toggle('urgent',timerSecs<=20&&!timerPaused);
     if(timerSecs<=0){
       clearInterval(timerInterval);
+      timerInterval=null;
       autoTakeTurn();
     }
   },1000);
 }
-function resetTimer(){timerSecs=90; document.getElementById('timerPill').classList.remove('urgent');}
+
+// Reset AND restart the timer interval (called when it becomes our turn again)
+function resetTimer(){
+  timerSecs=90;
+  const p=document.getElementById('timerPill');
+  p.classList.remove('urgent');
+  p.textContent='1:30';
+  // Always restart the interval so a new turn always has a fresh countdown
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{
+    if(timerPaused) return;
+    timerSecs--;
+    p.textContent=`${Math.floor(timerSecs/60)}:${(timerSecs%60).toString().padStart(2,'0')}`;
+    p.classList.toggle('urgent',timerSecs<=20&&!timerPaused);
+    if(timerSecs<=0){
+      clearInterval(timerInterval);
+      timerInterval=null;
+      autoTakeTurn();
+    }
+  },1000);
+}
 
 function autoTakeTurn(){
   if(!gameState) return;
@@ -802,11 +843,15 @@ function autoTakeTurn(){
   const phase=gameState.phase;
   if(phase==='roll'){
     addLog('⏱ Time expired — auto-rolling!','hi');
+    pendingAutoBuy=true;
     doAction('roll');
   } else if(phase==='action'){
+    addLog('⏱ Time expired — ending turn!','hi');
     doAction('end-turn');
+  } else if(phase==='buy'){
+    // Stuck on buy phase — auto-decline to unblock
+    doAction('decline-buy');
   }
-  // buy is handled server-side after roll; the can-buy event fires and we auto-buy below
 }
 
 // ═══ RENDER ══════════════════════════════════════════════════
@@ -974,6 +1019,7 @@ function processSingleEvent(ev){
       if(gameState?.players[gameState.currentPlayerIndex]?.id===myPlayerId){
         if(pendingAutoBuy){
           // Auto-buy: timer expired, just buy if we can afford it
+          document.getElementById('buyDrawer').classList.remove('open');
           const sq=BD.find(s=>s.name===ev.square);
           const me=gameState.players.find(p=>p.id===myPlayerId);
           if(sq&&me&&me.money>=ev.price){doAction('buy');}
@@ -1002,20 +1048,6 @@ function processSingleEvent(ev){
   }
 }
 
-// Override autoTakeTurn to set pendingAutoBuy flag
-function autoTakeTurn(){
-  if(!gameState) return;
-  const isMy=gameState.players[gameState.currentPlayerIndex]?.id===myPlayerId;
-  if(!isMy) return;
-  const phase=gameState.phase;
-  if(phase==='roll'){
-    addLog('⏱ Time expired — auto-rolling!','hi');
-    pendingAutoBuy=true; // if we land on unowned property, auto-buy if affordable
-    doAction('roll');
-  } else if(phase==='action'){
-    doAction('end-turn');
-  }
-}
 
 // ═══ PROPERTY POPUP ══════════════════════════════════════════
 function onSquareClick(sqId){
@@ -1073,26 +1105,38 @@ document.addEventListener('click',e=>{
   if(p.classList.contains('show')&&!p.contains(e.target)&&!e.target.closest('.sq')) closePropPopup();
 });
 
-// ═══ BUY MODAL ═══════════════════════════════════════════════
+// ═══ BUY DRAWER ══════════════════════════════════════════════
 function showBuyModal(ev){
   const sq=BD.find(s=>s.name===ev.square);
   document.getElementById('buyTitle').textContent=ev.square;
   document.getElementById('buyPriceSpan').textContent=ev.price;
-  let html=`<div class="modal-row"><span>Price</span><span style="color:var(--gold);font-weight:700">$${ev.price}</span></div>`;
+  // Color bar
+  const color=sq?.group?GC[sq.group]:(sq?.type==='railroad'?'#888':'#5a5a5a');
+  document.getElementById('buyColorBar').style.background=color;
+  let html=`<div class="bd-row"><span>Price</span><span>$${ev.price}</span></div>`;
   if(sq?.type==='property'&&sq.rent){
-    html+=`<div class="modal-row"><span>Base Rent</span><span>$${sq.rent[0]}</span></div>`;
-    html+=`<div class="modal-row"><span>Monopoly Rent</span><span>$${sq.rent[1]}</span></div>`;
-    html+=`<div class="modal-row"><span>Hotel Rent</span><span>$${sq.rent[5]}</span></div>`;
+    html+=`<div class="bd-row"><span>Base Rent</span><span>$${sq.rent[0]}</span></div>`;
+    html+=`<div class="bd-row"><span>Monopoly Rent</span><span>$${sq.rent[1]}</span></div>`;
+    html+=`<div class="bd-row"><span>Hotel Rent</span><span>$${sq.rent[5]}</span></div>`;
+    html+=`<div class="bd-row"><span>House Cost</span><span>$${sq.hc} each</span></div>`;
   } else if(sq?.type==='railroad'){
-    html+=`<div class="modal-row"><span>1 RR Rent</span><span>$25</span></div>`;
-    html+=`<div class="modal-row"><span>4 RR Rent</span><span>$200</span></div>`;
+    html+=`<div class="bd-row"><span>1 RR Rent</span><span>$25</span></div>`;
+    html+=`<div class="bd-row"><span>4 RR Rent</span><span>$200</span></div>`;
+  } else if(sq?.type==='utility'){
+    html+=`<div class="bd-row"><span>1 Utility</span><span>4× dice</span></div>`;
+    html+=`<div class="bd-row"><span>Both</span><span>10× dice</span></div>`;
   }
-  if(gameState){const me=gameState.players.find(p=>p.id===myPlayerId);html+=`<div class="modal-row"><span>Your Balance</span><span>$${me?.money?.toLocaleString()||'?'}</span></div>`;}
+  if(gameState){
+    const me=gameState.players.find(p=>p.id===myPlayerId);
+    html+=`<div class="bd-row" style="margin-top:.4rem"><span>Your Balance</span><span>$${me?.money?.toLocaleString()||'?'}</span></div>`;
+    const canAfford=me&&me.money>=ev.price;
+    html+=`<div class="bd-row"><span>After Purchase</span><span style="color:${canAfford?'var(--gold)':'#e74c3c'}">$${((me?.money||0)-ev.price).toLocaleString()}</span></div>`;
+  }
   document.getElementById('buyDetails').innerHTML=html;
-  openModal('buyModal');
+  document.getElementById('buyDrawer').classList.add('open');
 }
-function doBuy(){closeModal('buyModal');doAction('buy');}
-function doDecline(){closeModal('buyModal');doAction('decline-buy');}
+function doBuy(){document.getElementById('buyDrawer').classList.remove('open');doAction('buy');}
+function doDecline(){document.getElementById('buyDrawer').classList.remove('open');doAction('decline-buy');}
 
 // ═══ TRADE DRAWER ════════════════════════════════════════════
 function openTradeDrawer(){
@@ -1260,7 +1304,8 @@ function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    ['buyModal','bankruptModal'].forEach(closeModal);
+    ['bankruptModal'].forEach(closeModal);
+    document.getElementById('buyDrawer').classList.remove('open');
     closeTradeDrawer();
     document.getElementById('incomingDrawer').classList.remove('open');
     closePropPopup(); dismissCard();
